@@ -19,6 +19,7 @@ class AgentManager:
     def process_ticket(self, ticket_content):
         print(f"Processing ticket: {ticket_content[:50]}...")
         
+        
         # Step 1: Rule-based Precheck
         precheck_results = self.prechecker.run_precheck(ticket_content)
         
