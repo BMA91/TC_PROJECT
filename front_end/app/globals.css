@@ -1,0 +1,142 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+}
+
+@theme inline {
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --foreground: #ededed;
+  }
+}
+
+body {
+  font-family: "Plus Jakarta Sans";
+  color: black;
+}
+input {
+  border: solid 1px gray;
+}
+
+.log {
+  cursor: pointer;
+  border-radius: 20px;
+  transition: 1s;
+}
+
+.connect {
+  cursor: pointer;
+  border-radius: 20px;
+}
+
+body {
+  width: 100%;
+  height: 100vh;
+
+  font-family: Arial, sans-serif;
+}
+
+.sider {
+  position: relative;
+
+  display: flex;
+  flex-direction: column;
+}
+
+/*  */
+.Dividing-sections {
+  flex: 1;
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: white;
+  font-size: 24px;
+  font-weight: bold;
+  transition: all 0.3s ease;
+}
+
+.section-1 {
+  background: linear-gradient(90deg, #000000 0%, #000011 100%);
+}
+
+.section-2 {
+  background: linear-gradient(90deg, #000000 0%, #000022 100%);
+}
+
+.section-3 {
+  background: linear-gradient(90deg, #000000 0%, #000033 100%);
+}
+
+.section-4 {
+  background: linear-gradient(90deg, #000000 0%, #000055 100%);
+}
+
+.section-5 {
+  background: linear-gradient(90deg, #000000 0%, #000066 100%);
+}
+
+.section-10 {
+  background: linear-gradient(90deg, #000000 0%, #0000aa 100%);
+}
+
+.section-9 {
+  background: linear-gradient(90deg, #000000 0%, #0000cc 100%);
+}
+
+.section-8 {
+  background: linear-gradient(90deg, #000000 0%, #0000cc 100%);
+}
+
+.section-7 {
+  background: linear-gradient(90deg, #000000 0%, #0000aa 100%);
+}
+
+.section-6 {
+  background: linear-gradient(90deg, #000000 0%, #000088 100%);
+}
+
+.logo-container {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 200px;
+  height: 200px;
+  background: transparent;
+  border: none;
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 10;
+}
+
+.SwitchBtn {
+  border: 1px solid #2255ff;
+}
+
+.sub {
+  cursor: pointer;
+}
+.first {
+  background: linear-gradient(to top, #85c1fe, #e3e5fb);
+  height: 100vh;
+}
+.main-tit {
+  font-size: 40px;
+
+  color: #001a4d;
+}
+.first-body {
+  color: #001a4d;
+}
+.rem {
+  transform: scale(1.5);
+  padding: 5px;
+  margin-right: 10px;
+  margin-bottom: 10px;
+}

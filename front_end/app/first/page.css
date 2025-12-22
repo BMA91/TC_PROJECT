@@ -1,0 +1,52 @@
+.input-wrapper {
+  position: relative;
+  background: white;
+  border-radius: 20px;
+  border: 2px solid #2d3748;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.email-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  padding: 12px 20px;
+  font-size: 15px;
+  background: transparent;
+  color: #2d3748;
+}
+
+.email-input::placeholder {
+  color: #718096;
+}
+
+.login-button {
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 20px;
+  padding: 12px 28px;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.3s ease;
+  white-space: nowrap;
+}
+
+.login-button:hover {
+  background: #2563eb;
+}
+
+.login-button:active {
+  background: #1d4ed8;
+}
+.first {
+  position: relative;
+}
+.back {
+  z-index: 0;
+  position: absolute;
+}
