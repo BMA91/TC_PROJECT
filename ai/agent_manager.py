@@ -154,6 +154,7 @@ class AgentManager:
         """
         summary = analysis.get("summary", "N/A")
         keywords = analysis.get("keywords", [])
+        agent_role = analysis.get("agent_role", "agt_tech") # Default to tech if not specified
         
         # Logic to "orient" could be more complex, but here we just return the info
         return {
@@ -162,7 +163,7 @@ class AgentManager:
             "orientation": {
                 "summary": summary,
                 "keywords": keywords,
-                "target_department": "Specialist Human Agent"
+                "target_department": agent_role
             },
             "precheck": precheck_results
         }
