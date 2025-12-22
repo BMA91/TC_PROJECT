@@ -31,12 +31,6 @@ class AgentManager:
         ]
 
     def process_ticket(self, ticket_content):
-<<<<<<< HEAD
-        print(f"Processing ticket: {ticket_content[:50]}...")
-        
-        
-        # Step 1: Rule-based Precheck
-=======
         """
         Orchestrate the full ticket processing pipeline.
         """
@@ -46,7 +40,7 @@ class AgentManager:
 
         # Step 1: Precheck
         print("\n[Étape 1] Pré-vérification...")
->>>>>>> origin/Aymen-Branch
+        
         precheck_results = self.prechecker.run_precheck(ticket_content)
         
         if not precheck_results["passed"]:
