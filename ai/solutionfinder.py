@@ -2,8 +2,11 @@
 import os
 import json
 import numpy as np
+import chromadb
+from chromadb.utils import embedding_functions
 from mistralai import Mistral
 from dotenv import load_dotenv, find_dotenv
+from pdf_processor import convert_pdf_to_markdown
 
 # Load env
 load_dotenv(find_dotenv())
@@ -14,41 +17,86 @@ if not API_KEY:
 client = Mistral(api_key=API_KEY)
 
 # -----------------------------
-# Utils
+# ChromaDB Setup
 # -----------------------------
-def cosine_similarity(a, b):
-    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+# Initialize ChromaDB client (persistent storage)
+chroma_client = chromadb.PersistentClient(path="./chroma_db")
 
+# Use ChromaDB's built-in Mistral embedding function
+# It will automatically use the MISTRAL_API_KEY from the environment
+mistral_ef = embedding_functions.MistralEmbeddingFunction(
+    model="mistral-embed"
+)
 
-def embed_texts(texts):
-    """Embed a list of texts"""
-    response = client.embeddings.create(
-        model="mistral-embed",
-        inputs=texts
+def get_or_create_collection(name="ticket_knowledge_base"):
+    return chroma_client.get_or_create_collection(
+        name=name, 
+        embedding_function=mistral_ef
     )
-    return [e.embedding for e in response.data]
 
+# -----------------------------
+# Ingestion
+# -----------------------------
+def ingest_pdf_to_chroma(pdf_path: str, category: str = "general", collection_name="ticket_knowledge_base"):
+    """
+    Converts PDF to Markdown via Mistral OCR and stores in ChromaDB.
+    ChromaDB handles the embedding automatically.
+    """
+    collection = get_or_create_collection(collection_name)
+    
+    # 1. Convert PDF to Markdown
+    markdown_content = convert_pdf_to_markdown(pdf_path)
+    
+    # 2. Simple chunking (by paragraph for now)
+    chunks = [c.strip() for c in markdown_content.split("\n\n") if c.strip()]
+    
+    # 3. Add to Chroma (Embeddings are handled by mistral_ef automatically)
+    print(f"Ingesting {len(chunks)} chunks into ChromaDB (Category: {category})...")
+    ids = [f"{os.path.basename(pdf_path)}_{i}" for i in range(len(chunks))]
+    metadatas = [{"source": pdf_path, "category": category} for _ in chunks]
+    
+    # Batching to avoid "Too many inputs" error from Mistral API
+    batch_size = 50
+    for i in range(0, len(chunks), batch_size):
+        batch_chunks = chunks[i:i + batch_size]
+        batch_ids = ids[i:i + batch_size]
+        batch_metadatas = metadatas[i:i + batch_size]
+        
+        collection.add(
+            documents=batch_chunks,
+            ids=batch_ids,
+            metadatas=batch_metadatas
+        )
+    print("Ingestion complete.")
 
 # -----------------------------
 # RAG Core
 # -----------------------------
-def retrieve_top_docs(query, documents, k=3):
-    """
-    documents = [{"id": str, "content": str}]
-    """
-    doc_texts = [doc["content"] for doc in documents]
+def retrieve_from_chroma(query, category: str = None, collection_name="ticket_knowledge_base", k=3):
+    collection = get_or_create_collection(collection_name)
+    
+    # Prepare filter if category is provided
+    where_filter = {"category": category} if category else None
 
-    doc_embeddings = embed_texts(doc_texts)
-    query_embedding = embed_texts([query])[0]
-
-    scored_docs = []
-    for doc, emb in zip(documents, doc_embeddings):
-        score = cosine_similarity(query_embedding, emb)
-        scored_docs.append((score, doc))
-
-    scored_docs.sort(reverse=True, key=lambda x: x[0])
-    return scored_docs[:k]
-
+    # ChromaDB handles the query embedding automatically
+    results = collection.query(
+        query_texts=[query],
+        n_results=k,
+        where=where_filter
+    )
+    
+    # Format results to match previous structure
+    formatted_results = []
+    if results['documents']:
+        for i in range(len(results['documents'][0])):
+            formatted_results.append((
+                1.0, # Score placeholder
+                {
+                    "id": results['ids'][0][i],
+                    "content": results['documents'][0][i]
+                }
+            ))
+    return formatted_results
 
 def generate_answer(query, retrieved_docs):
     """
@@ -91,16 +139,16 @@ Answer with a clear solution and short explanation.
 # -----------------------------
 # Main API
 # -----------------------------
-def solution_finder(query, documents, top_k=3):
-    retrieved = retrieve_top_docs(query, documents, k=top_k)
+def solution_finder(query, category: str = None, collection_name="ticket_knowledge_base", top_k=3):
+    retrieved = retrieve_from_chroma(query, category=category, collection_name=collection_name, k=top_k)
 
     answer = generate_answer(query, retrieved)
 
     return {
         "query": query,
         "used_documents": [
-            {"id": doc["id"], "score": round(score, 3)}
-            for score, doc in retrieved
+            {"id": doc["id"], "content": doc["content"]}
+            for _, doc in retrieved
         ],
         "answer": answer
     }
@@ -110,27 +158,14 @@ def solution_finder(query, documents, top_k=3):
 # Example usage
 # -----------------------------
 if __name__ == "__main__":
-    docs = [
-        {
-            "id": "doc1",
-            "content": "Mistral models support chat completion and embeddings for RAG pipelines."
-        },
-        {
-            "id": "doc2",
-            "content": "RAG combines retrieval and generation to improve factual accuracy."
-        },
-        {
-            "id": "doc3",
-            "content": "Embeddings allow semantic search using cosine similarity."
-        }
-    ]
+    # Example: Ingest a PDF if it exists
+    # ingest_pdf_to_chroma("votre_document.pdf")
 
     user_query = input("Enter your question: ")
-
-    result = solution_finder(user_query, docs, top_k=2)
+    result = solution_finder(user_query)
 
     print("\n--- RAG RESULT ---\n")
     print("Answer:\n", result["answer"])
     print("\nUsed documents:")
     for d in result["used_documents"]:
-        print(f"- {d['id']} (score={d['score']})")
+        print(f"- {d['id']}")
