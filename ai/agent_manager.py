@@ -94,6 +94,10 @@ class AgentManager:
         # Step 3: Solution Finder (LLM CALL - RAG)
         print("\n[Étape 3] Recherche de solution (RAG)...")
         rag_result = solution_finder(query_for_rag, category=analysis.get("category"))
+        
+        if rag_result.get("fallback_used"):
+            print("ℹ️ Note : La recherche a été étendue à d'autres catégories car aucun document pertinent n'a été trouvé dans la catégorie initiale.")
+
         proposed_answer = rag_result["answer"]
         print(f"💡 Solution proposée : {proposed_answer[:100]}...")
         
@@ -176,10 +180,6 @@ class AgentManager:
 if __name__ == "__main__":
     from solutionfinder import ingest_pdf_to_chroma
     manager = AgentManager()
-    
-    print("\n=== SYSTÈME DE GESTION DE TICKETS IA ===")
-    print("Commandes spéciales :")
-    print("  /ingest path/to/file.pdf [category]  -> Ajouter un document (catégorie optionnelle)")
     
     while True:
         print("\n" + "-"*50)

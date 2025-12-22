@@ -102,7 +102,8 @@ def retrieve_from_chroma(query, category: str = None, collection_name="ticket_kn
                 similarity,
                 {
                     "id": results['ids'][0][i],
-                    "content": results['documents'][0][i]
+                    "content": results['documents'][0][i],
+                    "category": results['metadatas'][0][i].get("category") if results['metadatas'] else "N/A"
                 }
             ))
     return formatted_results
@@ -111,14 +112,18 @@ def generate_answer(query, retrieved_docs):
     """
     Generate grounded answer using retrieved snippets
     """
+    if not retrieved_docs:
+        return "Désolé, je n'ai trouvé aucune information pertinente dans la base de connaissances pour répondre à votre demande."
+
     context = "\n\n".join(
-        f"[Doc {i+1}] {doc['content'][:500]}"
+        f"[Doc {i+1} - Catégorie: {doc.get('category', 'N/A')}] {doc['content'][:500]}"
         for i, (_, doc) in enumerate(retrieved_docs)
     )
 
-    system_prompt = """You are a solution finder.
+    system_prompt = """You are a solution finder for Doxa.
 Use ONLY the provided documents to answer.
-If information is missing, say so clearly.
+If the information is not in the documents, say clearly that you don't have the information.
+Answer in French.
 """
 
     messages = [
@@ -144,22 +149,68 @@ Answer with a clear solution and short explanation.
 
     return response.choices[0].message.content
 
+def is_refusal(answer: str) -> bool:
+    """
+    Detects if the LLM answer is a refusal to answer due to lack of information.
+    """
+    refusal_keywords = [
+        "ne contiennent pas", "pas d'informations", "pas d'information",
+        "je ne sais pas", "information is missing", "not mentioned",
+        "aucune information", "malheureusement", "don't have information",
+        "do not contain", "no information", "not found",
+        "not provide", "unable to find", "cannot find", "not available",
+        "n'est pas mentionné", "ne précise pas", "ne mentionnent pas",
+        "ne mentionne pas", "pas explicitement"
+    ]
+    answer_lower = answer.lower()
+    return any(kw in answer_lower for kw in refusal_keywords)
 
 # -----------------------------
 # Main API
 # -----------------------------
 def solution_finder(query, category: str = None, collection_name="ticket_knowledge_base", top_k=3):
+    """
+    Finds a solution by searching in the specified category first.
+    If no relevant documents are found OR if the answer is a refusal,
+    it falls back to a global search across all categories.
+    """
+    # 1. Try with the specific category
+    print(f"🔍 [RAG] Recherche dans la catégorie : {category or 'Toutes'}")
     retrieved = retrieve_from_chroma(query, category=category, collection_name=collection_name, k=top_k)
-
+    
+    # Similarity threshold
+    SIMILARITY_THRESHOLD = 0.45
+    best_score = retrieved[0][0] if retrieved else 0
+    
     answer = generate_answer(query, retrieved)
+    is_fallback = False
+
+    # Check if we should fallback:
+    # - Either the score is too low
+    # - Or the LLM says it didn't find the info in the provided context
+    if category and (best_score < SIMILARITY_THRESHOLD or is_refusal(answer)):
+        reason = "score faible" if best_score < SIMILARITY_THRESHOLD else "information non trouvée dans cette catégorie"
+        print(f"🔄 [RAG] Fallback ({reason}). Recherche élargie à toutes les catégories...")
+        
+        # 2. Fallback: Search in all categories
+        retrieved_global = retrieve_from_chroma(query, category=None, collection_name=collection_name, k=top_k)
+        
+        # Only use global results if they are better or if we had a refusal
+        best_global_score = retrieved_global[0][0] if retrieved_global else 0
+        
+        if best_global_score > best_score or is_refusal(answer):
+            retrieved = retrieved_global
+            answer = generate_answer(query, retrieved)
+            is_fallback = True
 
     return {
         "query": query,
         "used_documents": [
-            {"id": doc["id"], "content": doc["content"], "score": score}
+            {"id": doc["id"], "content": doc["content"], "score": score, "category": doc.get("category")}
             for score, doc in retrieved
         ],
-        "answer": answer
+        "answer": answer,
+        "fallback_used": is_fallback
     }
 
 

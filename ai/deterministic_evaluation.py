@@ -38,7 +38,8 @@ class DeterministicEvaluator:
             "aucune information", "malheureusement", "don't have information",
             "do not contain", "no information", "not found",
             "not provide", "unable to find", "cannot find", "not available",
-            "n'est pas mentionné", "ne précise pas"
+            "n'est pas mentionné", "ne précise pas", "ne mentionnent pas",
+            "ne mentionne pas", "pas explicitement"
         ]
         
         response_lower = response.lower()
