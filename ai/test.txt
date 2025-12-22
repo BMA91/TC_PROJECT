@@ -1,5 +1,6 @@
-1- presearch
-2- Query analyser
-3- Solution finder
-4- deterministic evaluator
-5
+1- presearch (no llm)
+2- Query analyser generate summary + keywords (LLM CALL)
+3- Solution finder LLm CALL (Rag)
+4- deterministic evaluator (no llm using only hugging face model) evaluate the answer from solution finder
+if the confidence >= 60 ---> 5- response composer (LLM) ---> the client rate the answer with stars if its less than or equal 2 stars ---> 5.1
+if the confidence <60 ----> 5.1 check the summary + the keywords from 2 to orient the ticket to the specialist human agent then he answer in email after solving it (NO LLM)

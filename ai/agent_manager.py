@@ -1,9 +1,12 @@
 import os
+import json
 from dotenv import load_dotenv
 from mistralai import Mistral
 from precheck import TicketPrechecker
+from queryanalyser import analyse_query
 from solutionfinder import solution_finder
 from deterministic_evaluation import DeterministicEvaluator
+from response_composer import compose_response
 
 # Load environment variables
 load_dotenv()
@@ -30,7 +33,7 @@ class AgentManager:
     def process_ticket(self, ticket_content):
         print(f"Processing ticket: {ticket_content[:50]}...")
         
-        # Step 1: Rule-based Precheck
+        # Step 1: Presearch (no LLM)
         precheck_results = self.prechecker.run_precheck(ticket_content)
         
         if not precheck_results["passed"]:
@@ -43,34 +46,69 @@ class AgentManager:
         # Use masked content for the AI agent
         content_to_process = precheck_results["masked_content"]
         
-        # Step 2: Solution Finder (RAG)
-        print("Precheck passed. Finding solution...")
+        # Step 2: Query Analyser (LLM CALL)
+        print("Analysing query...")
+        analysis = analyse_query(content_to_process)
+        
+        # Step 3: Solution Finder (LLM CALL - RAG)
+        print("Finding solution...")
         rag_result = solution_finder(content_to_process, self.knowledge_base)
         proposed_answer = rag_result["answer"]
         
         # Get context used for evaluation
         context_used = "\n".join([doc["content"] for doc in self.knowledge_base if any(d["id"] == doc["id"] for d in rag_result["used_documents"])])
 
-        # Step 3: Deterministic Evaluation (Hugging Face)
+        # Step 4: Deterministic Evaluation (Hugging Face model)
         print("Evaluating solution confidence...")
         evaluation = self.evaluator.evaluate(context_used, proposed_answer)
         
-        if not evaluation["passed"]:
-            print(f"Warning: Low confidence ({evaluation['confidence_score']}). Escalating...")
+        # Step 5 & 5.1: Logic based on confidence
+        if evaluation["confidence_score"] >= 0.6:
+            print(f"Confidence high ({evaluation['confidence_score']}). Composing response...")
+            # Step 5: Response Composer (LLM)
+            final_response_data = compose_response(content_to_process, proposed_answer, evaluation)
+            
             return {
-                "status": "escalated",
-                "reason": "Low confidence in generated answer",
-                "evaluation": evaluation,
-                "proposed_answer": proposed_answer
+                "status": "success",
+                "final_response": final_response_data["final_response"],
+                "confidence": evaluation["confidence_score"],
+                "analysis": analysis,
+                "precheck": precheck_results,
+                "proposed_answer": proposed_answer # Keep for reference
             }
+        else:
+            # Step 5.1: Orient to specialist human agent (NO LLM)
+            print(f"Confidence low ({evaluation['confidence_score']}). Orienting to human agent...")
+            return self.orient_to_human(analysis, precheck_results)
 
-        # Step 4: Final Success
+    def orient_to_human(self, analysis, precheck_results):
+        """
+        Orient the ticket to a specialist human agent using summary and keywords.
+        """
+        summary = analysis.get("summary", "N/A")
+        keywords = analysis.get("keywords", [])
+        
+        # Logic to "orient" could be more complex, but here we just return the info
         return {
-            "status": "success",
-            "response": proposed_answer,
-            "confidence": evaluation["confidence_score"],
+            "status": "escalated",
+            "reason": "Low confidence in AI response",
+            "orientation": {
+                "summary": summary,
+                "keywords": keywords,
+                "target_department": "Specialist Human Agent"
+            },
             "precheck": precheck_results
         }
+
+    def handle_rating(self, ticket_id, stars, analysis, precheck_results):
+        """
+        Handle client rating. If <= 2 stars, escalate to human.
+        """
+        if stars <= 2:
+            print(f"Rating low ({stars} stars). Escalating to human...")
+            return self.orient_to_human(analysis, precheck_results)
+        else:
+            return {"status": "completed", "message": "Thank you for your feedback!"}
 
 if __name__ == "__main__":
     manager = AgentManager()
@@ -79,5 +117,10 @@ if __name__ == "__main__":
     ticket = "Bonjour, j'ai oublié mon mot de passe. Comment puis-je le réinitialiser ?"
     result = manager.process_ticket(ticket)
     
-    import json
     print(json.dumps(result, indent=2, ensure_ascii=False))
+    
+    # Simulate a low rating
+    if result["status"] == "success":
+        print("\n--- Simulating low rating (2 stars) ---")
+        rating_result = manager.handle_rating("ticket_123", 2, result["analysis"], result["precheck"])
+        print(json.dumps(rating_result, indent=2, ensure_ascii=False))
