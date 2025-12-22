@@ -26,12 +26,28 @@ class TicketPrechecker:
         self.password_pattern = re.compile(r'(password|pwd|mot de passe)(?:\s+(?:is|est))?\s*[:=]\s*(\S+)', re.IGNORECASE)
 
     def check_language(self, text):
-        """Verify if the language is French."""
+        """Verify if the language is French with a fallback for short texts."""
+        # Common French words to help with short queries
+        french_indicators = [
+            "ca", "pas", "le", "la", "les", "un", "une", "est", "sont", 
+            "fait", "marche", "probleme", "aide", "svp", "merci", "mon", "ma"
+        ]
+        
+        text_lower = text.lower()
+        
+        # If the text contains common French indicators, we are more lenient
+        has_indicator = any(f" {word} " in f" {text_lower} " for word in french_indicators)
+        
         try:
             lang = detect(text)
-            return lang == 'fr'
-        except LangDetectException:
+            if lang == 'fr':
+                return True
+            # If langdetect is unsure but we have indicators, we accept it
+            if has_indicator:
+                return True
             return False
+        except LangDetectException:
+            return has_indicator
 
     def is_spam(self, text):
         """Check for common spam keywords."""

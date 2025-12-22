@@ -64,6 +64,22 @@ class AgentManager:
         print(f"📝 Résumé : {analysis.get('summary')}")
         print(f"🔑 Mots-clés : {', '.join(analysis.get('keywords', []))}")
         
+        # Check if the query is in scope for the company
+        if not analysis.get("is_in_scope", True):
+            print("🚫 Requête hors sujet (Hors périmètre Doxa).")
+            out_of_scope_msg = "Désolé, je ne peux répondre qu'aux questions liées à Doxa et à nos services techniques. Votre demande semble être hors sujet."
+            print("\n" + "-"*30)
+            print("RÉPONSE FINALE :")
+            print(out_of_scope_msg)
+            print("-"*30)
+            return {
+                "status": "rejected",
+                "reason": "Out of scope",
+                "final_response": out_of_scope_msg,
+                "analysis": analysis,
+                "precheck": precheck_results
+            }
+
         # Optimization logic
         query_for_rag = content_to_process
         if not analysis.get("is_sufficient", True):
@@ -82,14 +98,23 @@ class AgentManager:
         
         # Get context used for evaluation
         context_used = "\n".join([doc["content"] for doc in rag_result["used_documents"]])
+        # Get the best retrieval score (similarity)
+        best_retrieval_score = rag_result["used_documents"][0].get("score", 0.5) if rag_result["used_documents"] else 0.0
 
         # Step 4: Deterministic Evaluation (Hugging Face model)
         print("\n[Étape 4] Évaluation de la confiance...")
-        evaluation = self.evaluator.evaluate(context_used, proposed_answer)
-        print(f"📊 Score de confiance : {evaluation['confidence_score']}")
+        evaluation = self.evaluator.evaluate(
+            query=query_for_rag,
+            context=context_used,
+            response=proposed_answer,
+            retrieval_score=best_retrieval_score
+        )
+        print(f"📊 Score de confiance global : {evaluation['confidence_score']}")
+        print(f"   - Pertinence (Doc vs Question) : {evaluation['relevance_score']}")
+        print(f"   - Fidélité (Réponse vs Doc) : {evaluation['faithfulness_score']}")
         
         # Step 5 & 5.1: Logic based on confidence
-        if evaluation["confidence_score"] >= 0.6:
+        if evaluation["confidence_score"] >= 0.6 and not evaluation.get("is_refusal"):
             print(f"✅ Confiance élevée. Composition de la réponse finale...")
             # Step 5: Response Composer (LLM)
             final_response_data = compose_response(content_to_process, proposed_answer, evaluation)
@@ -109,7 +134,11 @@ class AgentManager:
             }
         else:
             # Step 5.1: Orient to specialist human agent (NO LLM)
-            print(f"⚠️ Confiance faible ({evaluation['confidence_score']}). Orientation vers un agent humain...")
+            if evaluation.get("is_refusal"):
+                print(f"⚠️ L'IA n'a pas trouvé de réponse dans les documents. Orientation vers un agent humain...")
+            else:
+                print(f"⚠️ Confiance faible ({evaluation['confidence_score']}). Orientation vers un agent humain...")
+            
             result = self.orient_to_human(analysis, precheck_results)
             print(f"👨‍💼 Orienté vers : {result['orientation']['target_department']}")
             return result

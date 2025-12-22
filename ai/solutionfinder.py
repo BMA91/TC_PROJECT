@@ -89,8 +89,14 @@ def retrieve_from_chroma(query, category: str = None, collection_name="ticket_kn
     formatted_results = []
     if results['documents']:
         for i in range(len(results['documents'][0])):
+            # ChromaDB returns distances (lower is better). 
+            # We convert distance to a similarity score (0 to 1).
+            # Common formula: 1 / (1 + distance)
+            distance = results['distances'][0][i] if 'distances' in results and results['distances'] else 1.0
+            similarity = 1.0 / (1.0 + distance)
+            
             formatted_results.append((
-                1.0, # Score placeholder
+                similarity,
                 {
                     "id": results['ids'][0][i],
                     "content": results['documents'][0][i]
@@ -147,8 +153,8 @@ def solution_finder(query, category: str = None, collection_name="ticket_knowled
     return {
         "query": query,
         "used_documents": [
-            {"id": doc["id"], "content": doc["content"]}
-            for _, doc in retrieved
+            {"id": doc["id"], "content": doc["content"], "score": score}
+            for score, doc in retrieved
         ],
         "answer": answer
     }
