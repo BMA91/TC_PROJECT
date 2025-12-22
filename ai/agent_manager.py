@@ -71,9 +71,19 @@ class AgentManager:
         print(f"📝 Résumé : {analysis.get('summary')}")
         print(f"🔑 Mots-clés : {', '.join(analysis.get('keywords', []))}")
         
+        # Optimization logic
+        query_for_rag = content_to_process
+        if not analysis.get("is_sufficient", True):
+            print("⚠️ Requête jugée trop courte ou vague. Optimisation en cours...")
+            query_for_rag = analysis.get("optimized_query", content_to_process)
+            print(f"🔍 Requête optimisée : {query_for_rag}")
+        else:
+            # Even if sufficient, we can use the optimized version if it exists for better synonyms
+            query_for_rag = analysis.get("optimized_query", content_to_process)
+
         # Step 3: Solution Finder (LLM CALL - RAG)
         print("\n[Étape 3] Recherche de solution (RAG)...")
-        rag_result = solution_finder(content_to_process)
+        rag_result = solution_finder(query_for_rag)
         proposed_answer = rag_result["answer"]
         print(f"💡 Solution proposée : {proposed_answer[:100]}...")
         
