@@ -22,25 +22,28 @@ class TicketPrechecker:
         # Regex for sensitive data
         # Credit card: simple pattern for 13-16 digits
         self.card_pattern = re.compile(r'\b(?:\d[ -]*?){13,16}\b')
-        # Password: looking for "password", "pwd", "mot de passe" followed by optional "is/est", then ":" or "="
-        self.password_pattern = re.compile(r'(password|pwd|mot de passe)(?:\s+(?:is|est))?\s*[:=]\s*(\S+)', re.IGNORECASE)
+        # Password: looking for "password", "pwd", "mot de passe" followed by optional "is/est", then ":" or "=" or just a space
+        self.password_pattern = re.compile(r'(password|pwd|mot de passe)(?:\s+(?:is|est))?\s*[:=\s]\s*(\S+)', re.IGNORECASE)
 
     def check_language(self, text):
-        """Verify if the language is French with a fallback for short texts."""
-        # Common French words to help with short queries
-        french_indicators = [
+        """Verify if the language is French or English with a fallback for short texts."""
+        # Common French and English words to help with short queries
+        language_indicators = [
+            # French
             "ca", "pas", "le", "la", "les", "un", "une", "est", "sont", 
-            "fait", "marche", "probleme", "aide", "svp", "merci", "mon", "ma"
+            "fait", "marche", "probleme", "aide", "svp", "merci", "mon", "ma", "salut", "bonjour",
+            # English
+            "hi", "hello", "the", "is", "are", "not", "it", "works", "problem", "help", "please", "thanks", "my"
         ]
         
         text_lower = text.lower()
         
-        # If the text contains common French indicators, we are more lenient
-        has_indicator = any(f" {word} " in f" {text_lower} " for word in french_indicators)
+        # If the text contains common indicators, we are more lenient
+        has_indicator = any(f" {word} " in f" {text_lower} " for word in language_indicators)
         
         try:
             lang = detect(text)
-            if lang == 'fr':
+            if lang in ['fr', 'en']:
                 return True
             # If langdetect is unsure but we have indicators, we accept it
             if has_indicator:
@@ -83,7 +86,7 @@ class TicketPrechecker:
         masked_content = self.mask_sensitive_data(ticket_content) if has_sensitive else ticket_content
         
         results = {
-            "is_french": self.check_language(ticket_content),
+            "is_supported_lang": self.check_language(ticket_content),
             "is_spam": self.is_spam(ticket_content),
             "has_sensitive_data": has_sensitive,
             "masked_content": masked_content,
@@ -91,8 +94,8 @@ class TicketPrechecker:
             "reason": []
         }
 
-        if not results["is_french"]:
-            results["reason"].append("Language is not French.")
+        if not results["is_supported_lang"]:
+            results["reason"].append("Language is not supported (Only French and English are accepted).")
         
         if results["is_spam"]:
             results["reason"].append("Ticket identified as spam.")
@@ -101,8 +104,8 @@ class TicketPrechecker:
         if results["has_sensitive_data"]:
             results["reason"].append("Sensitive data was detected and masked.")
 
-        # If it's French and not spam, we let it pass (even if it had sensitive data, since it's now masked)
-        if results["is_french"] and not results["is_spam"]:
+        # If it's a supported language and not spam, we let it pass
+        if results["is_supported_lang"] and not results["is_spam"]:
             results["passed"] = True
             
         return results
@@ -124,7 +127,7 @@ if __name__ == "__main__":
         results = checker.run_precheck(user_input)
         print("\nResults:")
         print(f"  Passed: {results['passed']}")
-        print(f"  French: {results['is_french']}")
+        print(f"  Supported Lang: {results['is_supported_lang']}")
         print(f"  Spam: {results['is_spam']}")
         print(f"  Sensitive Data: {results['has_sensitive_data']}")
         print(f"  Masked Content: {results['masked_content']}")

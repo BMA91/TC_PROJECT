@@ -20,7 +20,10 @@ client = Mistral(api_key=API_KEY)
 # ChromaDB Setup
 # -----------------------------
 # Initialize ChromaDB client (persistent storage)
-chroma_client = chromadb.PersistentClient(path="./chroma_db")
+# Path is now relative to this file (ai/chroma_db)
+current_dir = os.path.dirname(os.path.abspath(__file__))
+db_path = os.path.join(current_dir, "chroma_db")
+chroma_client = chromadb.PersistentClient(path=db_path)
 
 # Use ChromaDB's built-in Mistral embedding function
 # It will automatically use the MISTRAL_API_KEY from the environment
