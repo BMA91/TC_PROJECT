@@ -62,6 +62,7 @@ class AgentManager:
         print("\n[Étape 2] Analyse de la requête...")
         analysis = analyse_query(content_to_process)
         print(f"📝 Résumé : {analysis.get('summary')}")
+        print(f"Catégorie : {analysis.get('category')}")
         print(f"🔑 Mots-clés : {', '.join(analysis.get('keywords', []))}")
         
         # Check if the query is in scope for the company
@@ -92,7 +93,7 @@ class AgentManager:
 
         # Step 3: Solution Finder (LLM CALL - RAG)
         print("\n[Étape 3] Recherche de solution (RAG)...")
-        rag_result = solution_finder(query_for_rag)
+        rag_result = solution_finder(query_for_rag, category=analysis.get("category"))
         proposed_answer = rag_result["answer"]
         print(f"💡 Solution proposée : {proposed_answer[:100]}...")
         

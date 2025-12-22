@@ -20,6 +20,7 @@ def analyse_query(query: str) -> dict:
     {
         "summary": "short summary of the query",
         "keywords": ["key", "words", "here"],
+        "category": "category_name",
         "is_sufficient": true/false,
         "is_in_scope": true/false,
         "optimized_query": "expanded query with synonyms and details"
@@ -30,11 +31,16 @@ def analyse_query(query: str) -> dict:
 Your task is to:
 1. Provide a short summary of the query in French.
 2. Extract key keywords.
-3. Evaluate if the query is sufficient (detailed enough) to find a precise solution.
-4. Evaluate if the query is 'is_in_scope':
+3. Identify the 'category' of the query among: 
+   - 'Legal, Regulatory, and Commercial Frameworks'
+   - 'Support and Reference Documentation'
+   - 'Operational and Practical User Guides'
+   - 'Other' (if it doesn't fit the above)
+4. Evaluate if the query is sufficient (detailed enough) to find a precise solution.
+5. Evaluate if the query is 'is_in_scope':
    - True if it's related to Doxa, technical support, user guides, or professional services.
    - False if it's completely unrelated (e.g., cooking, sports, general jokes, other companies).
-5. Provide an 'optimized_query':
+6. Provide an 'optimized_query':
    - If the query is too short or vague, expand it by detailing the likely technical context.
    - Replace common words with technical synonyms to improve search results (RAG).
 
@@ -42,6 +48,7 @@ Respond ONLY in JSON format:
 {
     "summary": "...",
     "keywords": ["...", "..."],
+    "category": "...",
     "is_sufficient": true,
     "is_in_scope": true,
     "optimized_query": "..."
@@ -78,5 +85,6 @@ if __name__ == "__main__":
     result = analyse_query(query)
 
     print("\n--- Query Analysis ---\n")
-    print(f"Summary:\n{result['summary']}\n")
-    print(f"Keywords:\n{', '.join(result['keywords'])}")
+    print(f"Summary:\n{result.get('summary')}\n")
+    print(f"Category:\n{result.get('category')}\n")
+    print(f"Keywords:\n{', '.join(result.get('keywords', []))}")
