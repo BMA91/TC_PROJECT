@@ -1,0 +1,5 @@
+1- presearch
+2- Query analyser
+3- Solution finder
+4- deterministic evaluator
+5
