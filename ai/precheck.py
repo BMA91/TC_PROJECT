@@ -22,8 +22,8 @@ class TicketPrechecker:
         # Regex for sensitive data
         # Credit card: simple pattern for 13-16 digits
         self.card_pattern = re.compile(r'\b(?:\d[ -]*?){13,16}\b')
-        # Password: looking for "password: " or "pwd: " followed by something
-        self.password_pattern = re.compile(r'(password|pwd|mot de passe)\s*[:=]\s*\S+', re.IGNORECASE)
+        # Password: looking for "password", "pwd", "mot de passe" followed by optional "is/est", then ":" or "="
+        self.password_pattern = re.compile(r'(password|pwd|mot de passe)(?:\s+(?:is|est))?\s*[:=]\s*(\S+)', re.IGNORECASE)
 
     def check_language(self, text):
         """Verify if the language is French."""
@@ -51,10 +51,14 @@ class TicketPrechecker:
 
     def mask_sensitive_data(self, text):
         """Replace card numbers and passwords with ****."""
-        # Mask card numbers
-        masked_text = self.card_pattern.sub('****', text)
-        # Mask passwords (keeping the label like "password: ")
-        masked_text = self.password_pattern.sub(r'\1: ****', masked_text)
+        # Mask card numbers (13-16 digits)
+        masked_text = self.card_pattern.sub('**** **** **** ****', text)
+        
+        # Mask passwords using the updated regex
+        # Group 1 is the keyword, Group 2 is the value to mask
+        # We use a sub with a backreference to keep the keyword and separator
+        masked_text = self.password_pattern.sub(lambda m: m.group(0).replace(m.group(2), "****"), masked_text)
+        
         return masked_text
 
     def run_precheck(self, ticket_content):

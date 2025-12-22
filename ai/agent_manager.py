@@ -53,6 +53,7 @@ class AgentManager:
         print("✅ Pré-vérification réussie.")
         if precheck_results["has_sensitive_data"]:
             print("⚠️ Données sensibles détectées et masquées.")
+            print(f"🔍 Contenu sécurisé : {precheck_results['masked_content']}")
 
         # Use masked content for the AI agent
         content_to_process = precheck_results["masked_content"]
