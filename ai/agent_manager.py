@@ -31,55 +31,77 @@ class AgentManager:
         ]
 
     def process_ticket(self, ticket_content):
-        print(f"Processing ticket: {ticket_content[:50]}...")
-        
-        # Step 1: Presearch (no LLM)
+        """
+        Orchestrate the full ticket processing pipeline.
+        """
+        print("\n" + "="*50)
+        print("DÉBUT DU TRAITEMENT DU TICKET")
+        print("="*50)
+
+        # Step 1: Precheck
+        print("\n[Étape 1] Pré-vérification...")
         precheck_results = self.prechecker.run_precheck(ticket_content)
         
         if not precheck_results["passed"]:
+            print(f"❌ Échec de la pré-vérification : {', '.join(precheck_results['reason'])}")
             return {
                 "status": "rejected",
                 "reason": precheck_results["reason"],
                 "details": precheck_results
             }
         
+        print("✅ Pré-vérification réussie.")
+        if precheck_results["has_sensitive_data"]:
+            print("⚠️ Données sensibles détectées et masquées.")
+
         # Use masked content for the AI agent
         content_to_process = precheck_results["masked_content"]
         
         # Step 2: Query Analyser (LLM CALL)
-        print("Analysing query...")
+        print("\n[Étape 2] Analyse de la requête...")
         analysis = analyse_query(content_to_process)
+        print(f"📝 Résumé : {analysis.get('summary')}")
+        print(f"🔑 Mots-clés : {', '.join(analysis.get('keywords', []))}")
         
         # Step 3: Solution Finder (LLM CALL - RAG)
-        print("Finding solution...")
-        rag_result = solution_finder(content_to_process, self.knowledge_base)
+        print("\n[Étape 3] Recherche de solution (RAG)...")
+        rag_result = solution_finder(content_to_process)
         proposed_answer = rag_result["answer"]
+        print(f"💡 Solution proposée : {proposed_answer[:100]}...")
         
         # Get context used for evaluation
-        context_used = "\n".join([doc["content"] for doc in self.knowledge_base if any(d["id"] == doc["id"] for d in rag_result["used_documents"])])
+        context_used = "\n".join([doc["content"] for doc in rag_result["used_documents"]])
 
         # Step 4: Deterministic Evaluation (Hugging Face model)
-        print("Evaluating solution confidence...")
+        print("\n[Étape 4] Évaluation de la confiance...")
         evaluation = self.evaluator.evaluate(context_used, proposed_answer)
+        print(f"📊 Score de confiance : {evaluation['confidence_score']}")
         
         # Step 5 & 5.1: Logic based on confidence
         if evaluation["confidence_score"] >= 0.6:
-            print(f"Confidence high ({evaluation['confidence_score']}). Composing response...")
+            print(f"✅ Confiance élevée. Composition de la réponse finale...")
             # Step 5: Response Composer (LLM)
             final_response_data = compose_response(content_to_process, proposed_answer, evaluation)
             
+            print("\n" + "-"*30)
+            print("RÉPONSE FINALE :")
+            print(final_response_data["final_response"])
+            print("-"*30)
+
             return {
                 "status": "success",
                 "final_response": final_response_data["final_response"],
                 "confidence": evaluation["confidence_score"],
                 "analysis": analysis,
                 "precheck": precheck_results,
-                "proposed_answer": proposed_answer # Keep for reference
+                "proposed_answer": proposed_answer
             }
         else:
             # Step 5.1: Orient to specialist human agent (NO LLM)
-            print(f"Confidence low ({evaluation['confidence_score']}). Orienting to human agent...")
-            return self.orient_to_human(analysis, precheck_results)
+            print(f"⚠️ Confiance faible ({evaluation['confidence_score']}). Orientation vers un agent humain...")
+            result = self.orient_to_human(analysis, precheck_results)
+            print(f"👨‍💼 Orienté vers : {result['orientation']['target_department']}")
+            return result
 
     def orient_to_human(self, analysis, precheck_results):
         """
@@ -111,16 +133,63 @@ class AgentManager:
             return {"status": "completed", "message": "Thank you for your feedback!"}
 
 if __name__ == "__main__":
+    from solutionfinder import ingest_pdf_to_chroma
     manager = AgentManager()
     
-    # Test with a valid French ticket
-    ticket = "Bonjour, j'ai oublié mon mot de passe. Comment puis-je le réinitialiser ?"
-    result = manager.process_ticket(ticket)
+    print("\n=== SYSTÈME DE GESTION DE TICKETS IA ===")
+    print("Commandes spéciales :")
+    print("  /ingest path/to/file.pdf [category]  -> Ajouter un document (catégorie optionnelle)")
     
-    print(json.dumps(result, indent=2, ensure_ascii=False))
-    
-    # Simulate a low rating
-    if result["status"] == "success":
-        print("\n--- Simulating low rating (2 stars) ---")
-        rating_result = manager.handle_rating("ticket_123", 2, result["analysis"], result["precheck"])
-        print(json.dumps(rating_result, indent=2, ensure_ascii=False))
+    while True:
+        print("\n" + "-"*50)
+        ticket = input("Veuillez saisir votre message (ou 'exit' pour quitter) : ")
+        
+        if ticket.lower() in ['exit', 'quit']:
+            print("Fermeture du système. Au revoir !")
+            break
+            
+        if ticket.startswith("/ingest "):
+            # Improved parsing to handle spaces in category
+            content = ticket.replace("/ingest ", "").strip()
+            if content.startswith('"'):
+                # Handle quoted path
+                end_quote = content.find('"', 1)
+                pdf_path = content[1:end_quote]
+                category = content[end_quote+1:].strip() or "general"
+            else:
+                parts = content.split(" ", 1)
+                pdf_path = parts[0]
+                category = parts[1].strip() if len(parts) > 1 else "general"
+            
+            if os.path.exists(pdf_path):
+                try:
+                    ingest_pdf_to_chroma(pdf_path, category=category)
+                except Exception as e:
+                    print(f"❌ Erreur lors de l'ingestion : {e}")
+            else:
+                print(f"❌ Fichier introuvable : {pdf_path}")
+            continue
+
+        if not ticket.strip():
+            continue
+            
+        try:
+            result = manager.process_ticket(ticket)
+            
+            # Optionnel : Demander une évaluation si le traitement a réussi
+            if result["status"] == "success":
+                try:
+                    print("\nComment évalueriez-vous cette réponse ? (1-5 étoiles)")
+                    stars = input("Étoiles : ")
+                    if stars.isdigit():
+                        stars = int(stars)
+                        rating_result = manager.handle_rating("ticket_id", stars, result["analysis"], result["precheck"])
+                        if rating_result["status"] == "escalated":
+                            print(f"\n⚠️ Suite à votre note, le ticket a été orienté vers : {rating_result['orientation']['target_department']}")
+                        else:
+                            print(f"\n✅ {rating_result['message']}")
+                except Exception as e:
+                    print(f"Erreur lors de l'évaluation : {e}")
+        except Exception as e:
+            print(f"\n❌ Une erreur inattendue est survenue : {e}")
+            print("Veuillez vérifier votre connexion internet et réessayer.")

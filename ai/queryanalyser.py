@@ -35,18 +35,22 @@ Respond ONLY in JSON format:
         {"role": "user", "content": query}
     ]
 
-    response = client.chat.complete(
-        model="mistral-small-latest",
-        messages=messages,
-        response_format={"type": "json_object"}  # Force JSON output
-    )
-
-    # Extract JSON from model
     try:
+        response = client.chat.complete(
+            model="mistral-small-latest",
+            messages=messages,
+            response_format={"type": "json_object"}  # Force JSON output
+        )
+        # Extract JSON from model
         content = response.choices[0].message.content
         result = json.loads(content)
-    except (KeyError, json.JSONDecodeError):
-        result = {"summary": "[Error: could not parse response]", "keywords": []}
+    except Exception as e:
+        print(f"⚠️ Erreur lors de l'appel à l'API Mistral : {e}")
+        result = {
+            "summary": "[Erreur de connexion ou de traitement]", 
+            "keywords": [],
+            "error": str(e)
+        }
 
     return result
 
