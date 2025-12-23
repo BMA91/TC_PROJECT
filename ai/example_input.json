@@ -1,0 +1,20 @@
+{
+  "Questions": [
+    {
+      "id": "Q001",
+      "query": "Comment réinitialiser mon mot de passe ?"
+    },
+    {
+      "id": "Q002",
+      "query": "Quels sont les délais de livraison pour une commande passée aujourd'hui ?"
+    },
+    {
+      "id": "Q003",
+      "query": "Comment retourner un article acheté la semaine dernière ?"
+    },
+    {
+      "id": "Q004",
+      "query": "Mon compte semble compromis, quelles sont les étapes à suivre ?"
+    }
+  ]
+}
