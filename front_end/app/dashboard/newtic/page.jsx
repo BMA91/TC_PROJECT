@@ -55,7 +55,7 @@ export default function TicketsPage() {
       data.append("ticketType", formData.ticketType);
       if (formData.attachment) data.append("attachment", formData.attachment);
 
-      const res = await fetch("/api/tickets", {
+      const res = await fetch("http://127.0.0.1:8000/tickets/", {
         method: "POST",
         body: data,
       });

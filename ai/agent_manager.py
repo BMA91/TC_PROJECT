@@ -3,11 +3,21 @@ import json
 from dotenv import load_dotenv
 from mistralai import Mistral
 
-from .precheck import TicketPrechecker
-from .queryanalyser import analyse_query
-from .solutionfinder import solution_finder
-from .deterministic_evaluation import DeterministicEvaluator
-from .response_composer import compose_response
+try:
+    # When package is used (python -m ai.agent_manager)
+    from .precheck import TicketPrechecker
+    from .queryanalyser import analyse_query
+    from .solutionfinder import solution_finder
+    from .deterministic_evaluation import DeterministicEvaluator
+    from .response_composer import compose_response
+except Exception:
+    # When running the file directly (python agent_manager.py) the package context
+    # may not be set; fall back to plain imports from the same directory.
+    from precheck import TicketPrechecker
+    from queryanalyser import analyse_query
+    from solutionfinder import solution_finder
+    from deterministic_evaluation import DeterministicEvaluator
+    from response_composer import compose_response
 
 import uuid
 import structlog

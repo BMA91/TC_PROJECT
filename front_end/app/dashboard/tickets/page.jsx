@@ -26,7 +26,7 @@ export default function TicketsPage() {
   const [to, setTo] = useState("2025-12-23");
 
   useEffect(() => {
-    fetch("http://127.0.0.1:8000/tickets")
+    fetch("http://127.0.0.1:8000/tickets/")
       .then((res) => res.json())
       .then((data) => {
         setTickets(data);
