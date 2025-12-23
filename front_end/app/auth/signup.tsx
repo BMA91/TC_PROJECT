@@ -78,14 +78,14 @@ export default function SignUp() {
         return;
       }
 
-      // Success - automatically log in the user
+  
       localStorage.setItem("isAuth", "true");
       if (data.user) {
         setLoginData(data.user);
         localStorage.setItem("userData", JSON.stringify(data.user));
       }
 
-      // Redirect to dashboard
+   
       router.push("/dashboard");
     } catch (err) {
       console.error("Signup error:", err);
