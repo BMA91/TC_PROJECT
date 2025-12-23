@@ -1,96 +1,129 @@
 # deterministic_evaluation.py
-import torch
-from transformers import AutoModelForSequenceClassification, AutoTokenizer
+import os
+import json
+from mistralai import Mistral
+from dotenv import load_dotenv, find_dotenv
+
+# Load environment variables
+load_dotenv(find_dotenv())
+API_KEY = os.getenv("MISTRAL_API_KEY")
 
 class DeterministicEvaluator:
     """
-    Evaluates the faithfulness of a generated response against the provided context
-    using a standard NLI model (DeBERTa-v3).
+    Evaluates the faithfulness, relevance, and sentiment of a generated response 
+    using an LLM (Mistral).
     """
-    def __init__(self, model_name="cross-encoder/nli-deberta-v3-base"):
-        print(f"Loading evaluation model: {model_name}...")
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = AutoModelForSequenceClassification.from_pretrained(model_name)
-        self.model.eval()
+    def __init__(self):
+        if not API_KEY:
+            raise ValueError("MISTRAL_API_KEY not found in .env file")
+        self.client = Mistral(api_key=API_KEY)
+        self.model = "mistral-small-latest"
 
-    def evaluate(self, query: str, context: str, response: str, retrieval_score: float = 1.0) -> dict:
+    def evaluate(self, query: str, context: str, response: str, retrieval_score: float = 1.0, threshold: float = 0.6) -> dict:
         """
-        Evaluates if the information found is actually true/useful for the query.
-        Combines:
-        1. Retrieval Score (Similarity between Query and Context)
-        2. NLI Score (Entailment between Context and Response)
-        3. Refusal Detection
+        Evaluates the response using LLM-as-a-judge.
+        Checks for:
+        1. Faithfulness (Response vs Context)
+        2. Relevance (Context vs Query)
+        3. Sentiment (Negative/Frustrated)
+        4. Refusal Detection
         """
-        # 0. Check if context is empty or very short
         if not context or len(context.strip()) < 20:
             return {
                 "confidence_score": 0.0,
                 "passed": False,
-                "threshold": 0.6,
+                "threshold": threshold,
                 "is_refusal": True,
+                "sentiment": "neutral",
                 "reason": "No significant context found"
             }
 
-        # 1. Check for refusal phrases (Aggressive detection)
-        refusal_keywords = [
-            "ne contiennent pas", "pas d'informations", "pas d'information",
-            "je ne sais pas", "information is missing", "not mentioned",
-            "aucune information", "malheureusement", "don't have information",
-            "do not contain", "no information", "not found",
-            "not provide", "unable to find", "cannot find", "not available",
-            "n'est pas mentionné", "ne précise pas", "ne mentionnent pas",
-            "ne mentionne pas", "pas explicitement"
-        ]
-        
-        response_lower = response.lower()
-        is_refusal = any(kw in response_lower for kw in refusal_keywords)
+        system_prompt = """You are an expert evaluator for a RAG system.
+Your task is to evaluate the quality of an AI response based on the provided context and user query.
 
-        # 2. NLI Evaluation (Faithfulness)
-        inputs = self.tokenizer(context, response, return_tensors="pt", truncation=True, max_length=512)
-        
-        with torch.no_grad():
-            outputs = self.model(**inputs)
-            probs = torch.softmax(outputs.logits, dim=-1)
-            faithfulness_score = probs[0][2].item()
+Evaluate the following criteria:
+1. Faithfulness: Is the response supported by the context? (Score 0.0 to 1.0)
+2. Relevance: Does the context contain the information needed to answer the query? (Score 0.0 to 1.0)
+3. Sentiment: Detect the user's emotion in the query. Is it 'negative' (frustrated, angry), 'neutral', or 'positive'?
+4. Refusal: Did the AI response state that it couldn't find the information? (True/False)
+5. Sensitive Data: Does the User Query contain ACTUAL sensitive information? 
+   - IMPORTANT: Asking about a procedure (e.g., "How to reset password?") is NOT sensitive.
+   - ONLY mark True if the user provides REAL data like:
+     - Credit Card Numbers (e.g., 4242...)
+     - Email Addresses (e.g., user@example.com)
+     - Phone Numbers
+     - Physical Addresses
+     - ACTUAL Passwords or API Keys (not just the word "password")
+     - Social Security Numbers or National IDs
+     - IBAN or Bank Account Numbers
+     - IP Addresses
+     - Dates of Birth
+   (True/False)
 
-        # 3. Relevance Evaluation (Query vs Context)
-        # We use the same NLI model to see if the Context entails the Query's need
-        relevance_inputs = self.tokenizer(context, query, return_tensors="pt", truncation=True, max_length=512)
-        with torch.no_grad():
-            relevance_outputs = self.model(**relevance_inputs)
-            relevance_probs = torch.softmax(relevance_outputs.logits, dim=-1)
-            # Entailment (2) or Neutral (1) are okay, Contradiction (0) is bad
-            relevance_score = (relevance_probs[0][2].item() + relevance_probs[0][1].item() * 0.5)
+Respond ONLY in JSON format:
+{
+    "faithfulness_score": 0.85,
+    "relevance_score": 0.9,
+    "sentiment": "neutral",
+    "is_refusal": false,
+    "has_sensitive_data": false,
+    "reason": "Brief explanation of the scores"
+}"""
 
-        # 4. Final Confidence Calculation
-        # We combine retrieval similarity, relevance, and faithfulness
-        # If it's a refusal, we crash the score.
-        if is_refusal:
-            confidence_score = 0.1
-        else:
-            # Weighted average: 30% retrieval, 40% relevance, 30% faithfulness
-            confidence_score = (retrieval_score * 0.3) + (relevance_score * 0.4) + (faithfulness_score * 0.3)
+        user_content = f"""
+User Query: {query}
+Context: {context}
+AI Response: {response}
+"""
 
-        # Threshold for passing
-        threshold = 0.6
-        passed = confidence_score >= threshold
+        try:
+            llm_response = self.client.chat.complete(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_content}
+                ],
+                response_format={"type": "json_object"}
+            )
+            
+            result = json.loads(llm_response.choices[0].message.content)
+            
+            # Calculate final confidence score
+            # Weighted average: 30% retrieval, 35% relevance, 35% faithfulness
+            f_score = result.get("faithfulness_score", 0.0)
+            r_score = result.get("relevance_score", 0.0)
+            
+            if result.get("is_refusal", False):
+                confidence_score = 0.1
+            else:
+                confidence_score = (retrieval_score * 0.3) + (r_score * 0.35) + (f_score * 0.35)
 
-        return {
-            "confidence_score": round(confidence_score, 4),
-            "faithfulness_score": round(faithfulness_score, 4),
-            "relevance_score": round(relevance_score, 4),
-            "retrieval_score": round(retrieval_score, 4),
-            "passed": passed,
-            "threshold": threshold,
-            "is_refusal": is_refusal,
-            "reason": "Information is relevant and faithful" if passed else "Information is likely irrelevant or missing"
-        }
+            result.update({
+                "confidence_score": round(confidence_score, 4),
+                "retrieval_score": round(retrieval_score, 4),
+                "passed": confidence_score >= threshold,
+                "threshold": threshold
+            })
+            
+            return result
+
+        except Exception as e:
+            print(f"⚠️ Error during LLM evaluation: {e}")
+            return {
+                "confidence_score": 0.0,
+                "passed": False,
+                "threshold": threshold,
+                "is_refusal": False,
+                "sentiment": "neutral",
+                "reason": f"Evaluation failed: {str(e)}"
+            }
 
 if __name__ == "__main__":
     # Quick test
     evaluator = DeterministicEvaluator()
     ctx = "The company offers a 30-day refund policy on all electronics."
+    qry = "Can I get a refund for my laptop?"
     ans = "You can get a refund within 30 days for your laptop."
     
-    result = evaluator.evaluate(ctx, ans)
-    print(f"Test Result: {result}")
+    result = evaluator.evaluate(qry, ctx, ans)
+    print(f"Test Result: {json.dumps(result, indent=2)}")

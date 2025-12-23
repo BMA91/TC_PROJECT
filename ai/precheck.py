@@ -18,12 +18,6 @@ class TicketPrechecker:
             "loterie", "félicitations", "action urgente", "offre exclusive",
             "investissement", "gagner gros", "promotion", "rabais"
         ]
-        
-        # Regex for sensitive data
-        # Credit card: simple pattern for 13-16 digits
-        self.card_pattern = re.compile(r'\b(?:\d[ -]*?){13,16}\b')
-        # Password: looking for "password", "pwd", "mot de passe" followed by optional "is/est", then ":" or "=" or just a space
-        self.password_pattern = re.compile(r'(password|pwd|mot de passe)(?:\s+(?:is|est))?\s*[:=\s]\s*(\S+)', re.IGNORECASE)
 
     def check_language(self, text):
         """Verify if the language is French or English with a fallback for short texts."""
@@ -60,36 +54,11 @@ class TicketPrechecker:
                 return True
         return False
 
-    def has_sensitive_data(self, text):
-        """Check for card numbers or passwords."""
-        if self.card_pattern.search(text):
-            return True
-        if self.password_pattern.search(text):
-            return True
-        return False
-
-    def mask_sensitive_data(self, text):
-        """Replace card numbers and passwords with ****."""
-        # Mask card numbers (13-16 digits)
-        masked_text = self.card_pattern.sub('**** **** **** ****', text)
-        
-        # Mask passwords using the updated regex
-        # Group 1 is the keyword, Group 2 is the value to mask
-        # We use a sub with a backreference to keep the keyword and separator
-        masked_text = self.password_pattern.sub(lambda m: m.group(0).replace(m.group(2), "****"), masked_text)
-        
-        return masked_text
-
     def run_precheck(self, ticket_content):
         """Run all prechecks and return a report."""
-        has_sensitive = self.has_sensitive_data(ticket_content)
-        masked_content = self.mask_sensitive_data(ticket_content) if has_sensitive else ticket_content
-        
         results = {
             "is_supported_lang": self.check_language(ticket_content),
             "is_spam": self.is_spam(ticket_content),
-            "has_sensitive_data": has_sensitive,
-            "masked_content": masked_content,
             "passed": False,
             "reason": []
         }
@@ -99,10 +68,6 @@ class TicketPrechecker:
         
         if results["is_spam"]:
             results["reason"].append("Ticket identified as spam.")
-            
-        # We still flag sensitive data, but we provide the masked version
-        if results["has_sensitive_data"]:
-            results["reason"].append("Sensitive data was detected and masked.")
 
         # If it's a supported language and not spam, we let it pass
         if results["is_supported_lang"] and not results["is_spam"]:

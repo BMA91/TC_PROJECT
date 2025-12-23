@@ -40,7 +40,16 @@ class Ticket(Base):
     ticket_type = Column(Enum(TicketType), nullable=False)  # As requested
     status = Column(Enum(TicketStatus), default=TicketStatus.EN_COURS)
     category = Column(String, nullable=True)  # Auto-detection
-
+    summary = Column(String, nullable=True)  # Auto-detection
+    
+    # AI Escalation fields
+    is_escalated = Column(Boolean, default=False, nullable=False)  # Indique si le ticket a été escaladé par l'AI
+    escalated_at = Column(DateTime(timezone=True), nullable=True)  # Date d'escalade
+    
+    # Agent response fields
+    agent_response = Column(Text, nullable=True)  # Réponse de l'agent (contenu de l'email)
+    agent_response_subject = Column(String, nullable=True)  # Sujet de l'email de réponse
+    agent_response_sent_at = Column(DateTime(timezone=True), nullable=True)  # Date d'envoi de la réponse
 
     client_id = Column(Integer, ForeignKey("users.id"))
     assigned_agent_id = Column(Integer, ForeignKey("users.id"), nullable=True)

@@ -21,6 +21,7 @@ class AgentManager:
         self.prechecker = TicketPrechecker()
         self.evaluator = DeterministicEvaluator()
         self.model = "mistral-large-latest"
+        self.confidence_threshold = 0.6
         
         # Mock Knowledge Base
         self.knowledge_base = [
@@ -34,119 +35,144 @@ class AgentManager:
         """
         Orchestrate the full ticket processing pipeline.
         """
-        print("\n" + "="*50)
-        print("DÉBUT DU TRAITEMENT DU TICKET")
-        print("="*50)
+        try:
+            print("\n" + "="*50)
+            print("DÉBUT DU TRAITEMENT DU TICKET")
+            print("="*50)
 
-        # Step 1: Precheck
-        print("\n[Étape 1] Pré-vérification...")
-        precheck_results = self.prechecker.run_precheck(ticket_content)
-        
-        if not precheck_results["passed"]:
-            print(f"❌ Échec de la pré-vérification : {', '.join(precheck_results['reason'])}")
-            return {
-                "status": "rejected",
-                "reason": precheck_results["reason"],
-                "details": precheck_results
-            }
-        
-        print("✅ Pré-vérification réussie.")
-        if precheck_results["has_sensitive_data"]:
-            print("⚠️ Données sensibles détectées et masquées.")
-            print(f"🔍 Contenu sécurisé : {precheck_results['masked_content']}")
-
-        # Use masked content for the AI agent
-        content_to_process = precheck_results["masked_content"]
-        
-        # Step 2: Query Analyser (LLM CALL)
-        print("\n[Étape 2] Analyse de la requête...")
-        analysis = analyse_query(content_to_process)
-        print(f"📝 Résumé : {analysis.get('summary')}")
-        print(f"Catégorie : {analysis.get('category')}")
-        print(f"🔑 Mots-clés : {', '.join(analysis.get('keywords', []))}")
-        
-        # Check if the query is in scope for the company
-        if not analysis.get("is_in_scope", True):
-            print("🚫 Requête hors sujet (Hors périmètre Doxa).")
-            out_of_scope_msg = "Désolé, je ne peux répondre qu'aux questions liées à Doxa et à nos services techniques. Votre demande semble être hors sujet."
-            print("\n" + "-"*30)
-            print("RÉPONSE FINALE :")
-            print(out_of_scope_msg)
-            print("-"*30)
-            return {
-                "status": "rejected",
-                "reason": "Out of scope",
-                "final_response": out_of_scope_msg,
-                "analysis": analysis,
-                "precheck": precheck_results
-            }
-
-        # Optimization logic
-        query_for_rag = content_to_process
-        if not analysis.get("is_sufficient", True):
-            print("⚠️ Requête jugée trop courte ou vague. Optimisation en cours...")
-            query_for_rag = analysis.get("optimized_query", content_to_process)
-            print(f"🔍 Requête optimisée : {query_for_rag}")
-        else:
-            # Even if sufficient, we can use the optimized version if it exists for better synonyms
-            query_for_rag = analysis.get("optimized_query", content_to_process)
-
-        # Step 3: Solution Finder (LLM CALL - RAG)
-        print("\n[Étape 3] Recherche de solution (RAG)...")
-        rag_result = solution_finder(query_for_rag, category=analysis.get("category"))
-        
-        if rag_result.get("fallback_used"):
-            print("ℹ️ Note : La recherche a été étendue à d'autres catégories car aucun document pertinent n'a été trouvé dans la catégorie initiale.")
-
-        proposed_answer = rag_result["answer"]
-        print(f"💡 Solution proposée : {proposed_answer[:100]}...")
-        
-        # Get context used for evaluation
-        context_used = "\n".join([doc["content"] for doc in rag_result["used_documents"]])
-        # Get the best retrieval score (similarity)
-        best_retrieval_score = rag_result["used_documents"][0].get("score", 0.5) if rag_result["used_documents"] else 0.0
-
-        # Step 4: Deterministic Evaluation (Hugging Face model)
-        print("\n[Étape 4] Évaluation de la confiance...")
-        evaluation = self.evaluator.evaluate(
-            query=query_for_rag,
-            context=context_used,
-            response=proposed_answer,
-            retrieval_score=best_retrieval_score
-        )
-        print(f"📊 Score de confiance global : {evaluation['confidence_score']}")
-        print(f"   - Pertinence (Doc vs Question) : {evaluation['relevance_score']}")
-        print(f"   - Fidélité (Réponse vs Doc) : {evaluation['faithfulness_score']}")
-        
-        # Step 5 & 5.1: Logic based on confidence
-        if evaluation["confidence_score"] >= 0.6 and not evaluation.get("is_refusal"):
-            print(f"✅ Confiance élevée. Composition de la réponse finale...")
-            # Step 5: Response Composer (LLM)
-            final_response_data = compose_response(content_to_process, proposed_answer, evaluation)
+            # Step 1: Precheck
+            print("\n[Étape 1] Pré-vérification...")
+            precheck_results = self.prechecker.run_precheck(ticket_content)
             
-            print("\n" + "-"*30)
-            print("RÉPONSE FINALE :")
-            print(final_response_data["final_response"])
-            print("-"*30)
+            if not precheck_results["passed"]:
+                print(f"❌ Échec de la pré-vérification : {', '.join(precheck_results['reason'])}")
+                return {
+                    "status": "rejected",
+                    "reason": precheck_results["reason"],
+                    "details": precheck_results
+                }
+            
+            print("✅ Pré-vérification réussie.")
 
-            return {
-                "status": "success",
-                "final_response": final_response_data["final_response"],
-                "confidence": evaluation["confidence_score"],
-                "analysis": analysis,
-                "precheck": precheck_results,
-                "proposed_answer": proposed_answer
-            }
-        else:
-            # Step 5.1: Orient to specialist human agent (NO LLM)
-            if evaluation.get("is_refusal"):
-                print(f"⚠️ L'IA n'a pas trouvé de réponse dans les documents. Orientation vers un agent humain...")
+            # Use raw content for the AI agent (Masking moved to evaluation)
+            content_to_process = ticket_content
+            
+            # Step 2: Query Analyser (LLM CALL)
+            print("\n[Étape 2] Analyse de la requête...")
+            analysis = analyse_query(content_to_process)
+            print(f"📝 Résumé : {analysis.get('summary')}")
+            print(f"Catégorie : {analysis.get('category')}")
+            print(f"🔑 Mots-clés : {', '.join(analysis.get('keywords', []))}")
+            
+            # Check if the query is in scope for the company
+            if not analysis.get("is_in_scope", True):
+                print("🚫 Requête hors sujet (Hors périmètre Doxa).")
+                out_of_scope_msg = "Désolé, je ne peux répondre qu'aux questions liées à Doxa et à nos services techniques. Votre demande semble être hors sujet."
+                print("\n" + "-"*30)
+                print("RÉPONSE FINALE :")
+                print(out_of_scope_msg)
+                print("-"*30)
+                return {
+                    "status": "rejected",
+                    "reason": "Out of scope",
+                    "final_response": out_of_scope_msg,
+                    "analysis": analysis,
+                    "precheck": precheck_results
+                }
+
+            # Optimization logic
+            query_for_rag = content_to_process
+            if not analysis.get("is_sufficient", True):
+                print("⚠️ Requête jugée trop courte ou vague. Optimisation en cours...")
+                query_for_rag = analysis.get("optimized_query", content_to_process)
+                print(f"🔍 Requête optimisée : {query_for_rag}")
             else:
-                print(f"⚠️ Confiance faible ({evaluation['confidence_score']}). Orientation vers un agent humain...")
+                # Even if sufficient, we can use the optimized version if it exists for better synonyms
+                query_for_rag = analysis.get("optimized_query", content_to_process)
+
+            # Step 3: Solution Finder (LLM CALL - RAG)
+            print("\n[Étape 3] Recherche de solution (RAG)...")
+            rag_result = solution_finder(query_for_rag, category=analysis.get("category"))
             
-            result = self.orient_to_human(analysis, precheck_results)
-            print(f"👨‍💼 Orienté vers : {result['orientation']['target_department']}")
-            return result
+            if rag_result.get("fallback_used"):
+                print("ℹ️ Note : La recherche a été étendue à d'autres catégories car aucun document pertinent n'a été trouvé dans la catégorie initiale.")
+
+            proposed_answer = rag_result["answer"]
+            print(f"💡 Solution proposée : {proposed_answer[:100]}...")
+            
+            # Get context used for evaluation
+            context_used = "\n".join([doc["content"] for doc in rag_result["used_documents"]])
+            # Get the best retrieval score (similarity)
+            best_retrieval_score = rag_result["used_documents"][0].get("score", 0.5) if rag_result["used_documents"] else 0.0
+
+            # Step 4: Deterministic Evaluation (Hugging Face model)
+            print("\n[Étape 4] Évaluation de la confiance...")
+            evaluation = self.evaluator.evaluate(
+                query=query_for_rag,
+                context=context_used,
+                response=proposed_answer,
+                retrieval_score=best_retrieval_score,
+                threshold=self.confidence_threshold
+            )
+            print(f"📊 Score de confiance global : {evaluation['confidence_score']}")
+            print(f"   - Pertinence (Doc vs Question) : {evaluation['relevance_score']}")
+            print(f"   - Fidélité (Réponse vs Doc) : {evaluation['faithfulness_score']}")
+            print(f"   - Sentiment détecté : {evaluation.get('sentiment', 'neutral')}")
+            print(f"   - Données sensibles détectées : {evaluation.get('has_sensitive_data', False)}")
+            print(f"   - Raison de l'évaluation : {evaluation.get('reason', 'N/A')}")
+            
+            # Step 5 & 5.1: Logic based on confidence and safety
+            # Escalation triggers: 
+            # 1. Sensitive data detected (100% escalation)
+            # 2. Confidence score < 0.6
+            # 3. LLM refused to answer (no info found)
+            
+            should_escalate = (
+                evaluation.get("has_sensitive_data", False) or 
+                evaluation["confidence_score"] < self.confidence_threshold or
+                evaluation.get("is_refusal", False)
+            )
+
+            if not should_escalate:
+                print(f"✅ Confiance élevée et sécurité validée. Composition de la réponse finale...")
+                # Step 5: Response Composer (LLM)
+                final_response_data = compose_response(content_to_process, proposed_answer, evaluation)
+                
+                print("\n" + "-"*30)
+                print("RÉPONSE FINALE :")
+                print(final_response_data["final_response"])
+                print("-"*30)
+
+                return {
+                    "status": "success",
+                    "final_response": final_response_data["final_response"],
+                    "confidence": evaluation["confidence_score"],
+                    "analysis": analysis,
+                    "precheck": precheck_results,
+                    "proposed_answer": proposed_answer
+                }
+            else:
+                # Step 5.1: Orient to specialist human agent (NO LLM)
+                if evaluation.get("has_sensitive_data", False):
+                    print(f"🚨 Données sensibles détectées ! Escalade immédiate vers un agent humain...")
+                    reason = "Sensitive data detected (PII)"
+                elif evaluation.get("is_refusal"):
+                    print(f"⚠️ L'IA n'a pas trouvé de réponse dans les documents. Orientation vers un agent humain...")
+                    reason = "No information found in KB"
+                else:
+                    print(f"⚠️ Confiance faible ({evaluation['confidence_score']}). Orientation vers un agent humain...")
+                    reason = f"Low confidence score ({evaluation['confidence_score']})"
+                
+                result = self.orient_to_human(analysis, precheck_results)
+                result["reason"] = reason
+                print(f"👨‍💼 Orienté vers : {result['orientation']['target_department']}")
+                return result
+
+        except Exception as e:
+            print(f"❌ Erreur critique lors du traitement : {e}")
+            # In case of any unexpected error, escalate to human
+            error_analysis = {"summary": "Error during processing", "agent_role": "agt_tech"}
+            return self.orient_to_human(error_analysis, {"passed": True, "masked_content": ticket_content})
 
     def orient_to_human(self, analysis, precheck_results):
         """

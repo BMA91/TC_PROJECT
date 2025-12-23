@@ -1,0 +1,2 @@
+Semantic chunking implemented using LangChain's SemanticChunker with Mistral embeddings.
+Similarity testing >0.8 implemented: Added test_similarity_on_kb_sample function in solutionfinder.py, and adjusted SIMILARITY_THRESHOLD to 0.8.
