@@ -1,6 +1,14 @@
 "use client";
-import { useState } from "react";
+import { useState, useContext } from "react";
+import { useRouter } from "next/navigation";
+import { LoginContext } from "../layout";
+
 export default function SignUp() {
+  const context = useContext(LoginContext);
+  if (!context) throw new Error("LoginContext is not available");
+
+  const { setLoginData } = context;
+  const router = useRouter();
   const [formData, setFormData1] = useState({
     nom: "",
     prenom: "",
@@ -9,16 +17,81 @@ export default function SignUp() {
     password: "",
     confirmPassword: "",
   });
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
   const handleChange = (e: any) => {
     const { name, value } = e.target;
     setFormData1((prev) => ({
       ...prev,
       [name]: value,
     }));
+    
+    if (error) setError("");
+    if (success) setSuccess("");
   };
-  const handleSubmit = (e: any) => {
+
+  const handleSubmit = async (e: any) => {
     e.preventDefault();
-    console.log(formData);
+    setError("");
+    setSuccess("");
+
+  
+    if (!formData.nom || !formData.prenom || !formData.email || !formData.telephone || !formData.password || !formData.confirmPassword) {
+      setError("Veuillez remplir tous les champs");
+      return;
+    }
+
+    if (formData.password !== formData.confirmPassword) {
+      setError("Les mots de passe ne correspondent pas");
+      return;
+    }
+
+    if (formData.password.length < 4) {
+      setError("Le mot de passe doit contenir au moins 4 caractères");
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const response = await fetch("/api/signup", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          nom: formData.nom,
+          prenom: formData.prenom,
+          email: formData.email,
+          telephone: formData.telephone,
+          password: formData.password,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error || "Erreur lors de la création du compte");
+        setIsLoading(false);
+        return;
+      }
+
+      // Success - automatically log in the user
+      localStorage.setItem("isAuth", "true");
+      if (data.user) {
+        setLoginData(data.user);
+        localStorage.setItem("userData", JSON.stringify(data.user));
+      }
+
+      // Redirect to dashboard
+      router.push("/dashboard");
+    } catch (err) {
+      console.error("Signup error:", err);
+      setError("Erreur de connexion au serveur. Veuillez réessayer.");
+      setIsLoading(false);
+    }
   };
   return (
     <>
@@ -76,14 +149,27 @@ export default function SignUp() {
           placeholder="Confirmer le mot de passe"
           value={formData.confirmPassword}
           onChange={handleChange}
-          className="mt-5 mb-5 rounded-lg h-10 p-2"
+          className="mt-5 rounded-lg h-10 p-2"
         />
+
+        {error && (
+          <div className="text-red-500 text-sm mt-2 mb-2 p-2 bg-red-50 rounded">
+            {error}
+          </div>
+        )}
+
+        {success && (
+          <div className="text-green-500 text-sm mt-2 mb-2 p-2 bg-green-50 rounded">
+            {success}
+          </div>
+        )}
 
         <button
           type="submit"
-          className="sub bg-[#091636] text-white h-10 rounded-2xl"
+          disabled={isLoading}
+          className="sub bg-[#091636] text-white h-10 rounded-2xl mt-5 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Sign Up
+          {isLoading ? "Création du compte..." : "S'inscrire"}
         </button>
       </form>
     </>
