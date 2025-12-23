@@ -5,7 +5,7 @@ from fastapi.encoders import jsonable_encoder
 import traceback
 
 from app.database import Base, SessionLocal, engine
-from app.api.endpoints import users, admin
+from app.api.endpoints import users, admin, tickets
 from app.models import user, ticket
 from app.models.user import User
 
@@ -91,3 +91,4 @@ def root_from_tc():
 
 app.include_router(users.router)
 app.include_router(admin.router)
+app.include_router(tickets.router)
