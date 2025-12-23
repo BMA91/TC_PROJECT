@@ -46,6 +46,10 @@ Your task is to:
 7. Identify the 'agent_role' to route the query to:
    - 'agt_tech': if the query is technical, related to bugs, errors, setup, or user guides.
    - 'agt_sales': if the query is commercial, related to pricing, contracts, or legal frameworks.
+8. Detect the 'sentiment' of the user:
+   - 'negative': if the user is frustrated, angry, or reporting a critical failure.
+   - 'neutral': for standard questions.
+   - 'positive': for thanks or positive feedback.
 
 
 Respond ONLY in JSON format:
@@ -54,11 +58,7 @@ Respond ONLY in JSON format:
     "keywords": ["...", "..."],
     "category": "...",
     "agent_role": "agt_tech" | "agt_sales",
-    "is_sufficient": true,
-    "is_in_scope": true,
-    "optimized_query": "..."
-}"""
-
+    "sentiment": "negative" | "neutral" | "positive",
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": query}
