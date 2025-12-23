@@ -27,6 +27,17 @@ class UserLogin(BaseModel):
     password: str
 
 
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+    user: "UserResponse"
+
+
+class TokenData(BaseModel):
+    email: str | None = None
+    user_id: int | None = None
+
+
 class AgentCreate(BaseModel):
     """Schema for admin to create agents"""
     nom: str

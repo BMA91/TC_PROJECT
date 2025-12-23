@@ -8,6 +8,7 @@ from app.database import Base, SessionLocal, engine
 from app.api.endpoints import users, admin, tickets
 from app.models import user, ticket
 from app.models.user import User
+from app.security import hash_password
 
 app = FastAPI()
 
@@ -21,12 +22,12 @@ def create_default_admin():
         existing_admin = db.query(User).filter(User.email == admin_email).first()
         
         if not existing_admin:
-            # Create default admin
+            # Create default admin with hashed password
             admin_user = User(
                 nom="Admin",
                 prenom="System",
                 telephone="000000000",
-                password="admin",
+                password=hash_password("admin"),
                 email=admin_email,
                 role="admin",
             )

@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.models.user import User
 from app.schemas.user import UserCreate, UserRole, AgentCreate
+from app.security import hash_password, verify_password
 
 
 def _get_random_client_role() -> str:
@@ -16,17 +17,21 @@ def _get_random_client_role() -> str:
 
 def create_user(db: Session, user_in: UserCreate) -> User:
     """
-    Create a user with automatic role assignment.
+    Create a user with automatic role assignment and hashed password.
     Role is randomly assigned from client_1, client_2, or client_3.
+    Password is hashed using bcrypt.
     """
     # Automatically assign a random client role
     role = _get_random_client_role()
+    
+    # Hash the password
+    hashed_password = hash_password(user_in.password)
     
     db_user = User(
         nom=user_in.nom,
         prenom=user_in.prenom,
         telephone=user_in.telephone,
-        password=user_in.password,
+        password=hashed_password,
         email=user_in.email,
         role=role,
     )
@@ -47,10 +52,11 @@ def get_user_by_email(db: Session, email: str) -> User | None:
 def verify_user_credentials(db: Session, email: str, password: str) -> User | None:
     """
     Verify user credentials by email and password.
+    Compares the provided password against the hashed password in the database.
     Returns the user if credentials are valid, None otherwise.
     """
     user = db.query(User).filter(User.email == email).first()
-    if user and user.password == password:
+    if user and verify_password(password, user.password):
         return user
     return None
 
@@ -79,13 +85,17 @@ def delete_user(db: Session, user_id: int) -> bool:
 def create_agent(db: Session, agent_in: AgentCreate, role: str) -> User:
     """
     Create an agent with a specific role (agt_tech or agt_sales).
+    Password is hashed using bcrypt.
     This is used by admin to create agents.
     """
+    # Hash the password
+    hashed_password = hash_password(agent_in.password)
+    
     db_agent = User(
         nom=agent_in.nom,
         prenom=agent_in.prenom,
         telephone=agent_in.telephone,
-        password=agent_in.password,
+        password=hashed_password,
         email=agent_in.email,
         role=role,
     )
