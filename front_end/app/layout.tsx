@@ -14,7 +14,6 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-/* 🔹 Shared Context */
 export const LoginContext = createContext<{
   loginData: any;
   setLoginData: (data: any) => void;

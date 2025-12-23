@@ -26,22 +26,20 @@ const userp = "/images/user.svg";
 export default function TicketsPage() {
   const context = useContext(LoginContext);
   const { loginData } = context ?? {};
-
   const router = useRouter();
 
   const [menu, setMenu] = useState(false);
   const [formData, setFormData] = useState({
     ticketType: "",
-    subject: "",
+    title: "",
     description: "",
     attachment: null,
   });
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!loginData) {
-      router.push("/auth");
-    }
-  }, [loginData, router]);
+    if (!loginData) router.push("/auth");
+  }, [loginData]);
 
   if (!context) return null;
 
@@ -54,9 +52,36 @@ export default function TicketsPage() {
     setFormData((prev) => ({ ...prev, attachment: e.target.files[0] }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log(formData); // lhna tbackendi
+    setLoading(true);
+    try {
+      const data = new FormData();
+      data.append("title", formData.title);
+      data.append("description", formData.description);
+      data.append("ticketType", formData.ticketType);
+      if (formData.attachment) data.append("attachment", formData.attachment);
+
+      const res = await fetch("http://127.0.0.1:8000/tickets", {
+        method: "POST",
+        body: data,
+      });
+
+      if (!res.ok) throw new Error("Failed to create ticket");
+      const ticket = await res.json();
+      alert("Ticket créé avec succès ! ID: " + ticket.id);
+
+      setFormData({
+        ticketType: "",
+        title: "",
+        description: "",
+        attachment: null,
+      });
+    } catch {
+      alert("Erreur lors de la création du ticket");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -98,42 +123,12 @@ export default function TicketsPage() {
             <div className="absolute right-0 mt-3 w-56 bg-[#0C2155] text-white p-4 rounded-xl">
               <p className="font-semibold">{loginData?.address ?? "User"}</p>
               <p className="text-[#AAC7FF] text-sm">UI/UX Designer</p>
-
               <hr className="my-3 border-white/30" />
-
               <button className="border border-white rounded px-2 py-1 mb-3">
                 Modify
               </button>
-
               <hr className="my-3 border-white/30" />
-
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center gap-2">
-                  <img src="./s" alt="" />
-                  <button>Notifications</button>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <img src="./s" alt="" />
-                  <button>Messages</button>
-                </div>
-
-                <hr className="my-2 border-white/30" />
-
-                <div className="flex items-center gap-2">
-                  <img src="./s" alt="" />
-                  <button>Aide</button>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <img src="./s" alt="" />
-                  <button>Paramètres</button>
-                </div>
-
-                <hr className="my-2 border-white/30" />
-
-                <button className="text-red-400 text-left">Logout</button>
-              </div>
+              <button className="text-red-400 text-left">Logout</button>
             </div>
           )}
         </div>
@@ -147,7 +142,6 @@ export default function TicketsPage() {
         <form onSubmit={handleSubmit} className="space-y-8">
           <fieldset className="space-y-3">
             <legend className="font-medium mb-2">Type de ticket</legend>
-
             {ticketTypes.map((type) => (
               <label key={type.value} className="flex items-center gap-3">
                 <input
@@ -164,11 +158,12 @@ export default function TicketsPage() {
           </fieldset>
 
           <input
-            name="subject"
-            value={formData.subject}
+            name="title"
+            value={formData.title}
             onChange={handleChange}
-            placeholder="Sujet"
+            placeholder="Titre"
             className="w-full border rounded px-4 py-2"
+            required
           />
 
           <textarea
@@ -177,17 +172,18 @@ export default function TicketsPage() {
             onChange={handleChange}
             rows={4}
             className="w-full border rounded px-4 py-2"
+            placeholder="Description"
+            required
           />
 
           <input type="file" onChange={handleFileChange} />
 
           <button
+            type="submit"
             className="bg-blue-600 text-white px-10 py-2 rounded-lg"
-            onClick={() => {
-             
-            }}
+            disabled={loading}
           >
-            Soumettre
+            {loading ? "Création..." : "Soumettre"}
           </button>
         </form>
       </div>
