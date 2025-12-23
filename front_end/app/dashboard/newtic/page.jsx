@@ -62,7 +62,7 @@ export default function TicketsPage() {
       data.append("ticketType", formData.ticketType);
       if (formData.attachment) data.append("attachment", formData.attachment);
 
-      const res = await fetch("http://127.0.0.1:8000/tickets", {
+      const res = await fetch("/api/tickets", {
         method: "POST",
         body: data,
       });
@@ -122,7 +122,7 @@ export default function TicketsPage() {
           {menu && (
             <div className="absolute right-0 mt-3 w-56 bg-[#0C2155] text-white p-4 rounded-xl">
               <p className="font-semibold">{loginData?.address ?? "User"}</p>
-              <p className="text-[#AAC7FF] text-sm">UI/UX Designer</p>
+              <p className="text-[#AAC7FF] text-sm">{loginData?.role ?? "User"}</p>
               <hr className="my-3 border-white/30" />
               <button className="border border-white rounded px-2 py-1 mb-3">
                 Modify
