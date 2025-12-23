@@ -13,7 +13,7 @@ class DeterministicEvaluator:
         self.model = AutoModelForSequenceClassification.from_pretrained(model_name)
         self.model.eval()
 
-    def evaluate(self, query: str, context: str, response: str, retrieval_score: float = 1.0) -> dict:
+    def evaluate(self, query: str, context: str, response: str, retrieval_score: float = 1.0, threshold: float = 0.6) -> dict:
         """
         Evaluates if the information found is actually true/useful for the query.
         Combines:
@@ -26,7 +26,7 @@ class DeterministicEvaluator:
             return {
                 "confidence_score": 0.0,
                 "passed": False,
-                "threshold": 0.6,
+                "threshold": threshold,
                 "is_refusal": True,
                 "reason": "No significant context found"
             }
@@ -72,7 +72,6 @@ class DeterministicEvaluator:
             confidence_score = (retrieval_score * 0.3) + (relevance_score * 0.4) + (faithfulness_score * 0.3)
 
         # Threshold for passing
-        threshold = 0.6
         passed = confidence_score >= threshold
 
         return {

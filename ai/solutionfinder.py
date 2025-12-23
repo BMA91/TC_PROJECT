@@ -7,6 +7,8 @@ from chromadb.utils import embedding_functions
 from mistralai import Mistral
 from dotenv import load_dotenv, find_dotenv
 from pdf_processor import convert_pdf_to_markdown
+from langchain_experimental.text_splitter import SemanticChunker
+from langchain_mistralai import MistralAIEmbeddings
 
 # Load env
 load_dotenv(find_dotenv())
@@ -15,6 +17,9 @@ if not API_KEY:
     raise ValueError("MISTRAL_API_KEY not found")
 
 client = Mistral(api_key=API_KEY)
+
+# LangChain embeddings for semantic chunking
+lc_embeddings = MistralAIEmbeddings(model="mistral-embed", api_key=API_KEY)
 
 # -----------------------------
 # ChromaDB Setup
@@ -50,8 +55,10 @@ def ingest_pdf_to_chroma(pdf_path: str, category: str = "general", collection_na
     # 1. Convert PDF to Markdown
     markdown_content = convert_pdf_to_markdown(pdf_path)
     
-    # 2. Simple chunking (by paragraph for now)
-    chunks = [c.strip() for c in markdown_content.split("\n\n") if c.strip()]
+    # 2. Semantic chunking using LangChain
+    text_splitter = SemanticChunker(lc_embeddings, breakpoint_threshold_type="percentile")
+    chunks = text_splitter.split_text(markdown_content)
+    chunks = [c.strip() for c in chunks if c.strip()]
     
     # 3. Add to Chroma (Embeddings are handled by mistral_ef automatically)
     print(f"Ingesting {len(chunks)} chunks into ChromaDB (Category: {category})...")
@@ -179,7 +186,7 @@ def solution_finder(query, category: str = None, collection_name="ticket_knowled
     retrieved = retrieve_from_chroma(query, category=category, collection_name=collection_name, k=top_k)
     
     # Similarity threshold
-    SIMILARITY_THRESHOLD = 0.45
+    SIMILARITY_THRESHOLD = 0.8
     best_score = retrieved[0][0] if retrieved else 0
     
     answer = generate_answer(query, retrieved)
@@ -214,6 +221,38 @@ def solution_finder(query, category: str = None, collection_name="ticket_knowled
     }
 
 
+def test_similarity_on_kb_sample(sample_queries, collection_name="ticket_knowledge_base", threshold=0.8):
+    """
+    Tests similarity scores on sample KB entries.
+    Queries the KB with sample queries and asserts that the best similarity score > threshold.
+    """
+    collection = get_or_create_collection(collection_name)
+    
+    # Check if collection has documents
+    if collection.count() == 0:
+        print("❌ KB is empty. Please ingest documents first.")
+        return False
+    
+    all_passed = True
+    for query in sample_queries:
+        print(f"🔍 Testing query: '{query}'")
+        retrieved = retrieve_from_chroma(query, collection_name=collection_name, k=1)
+        
+        if retrieved:
+            best_score = retrieved[0][0]
+            print(f"   Best similarity score: {best_score:.3f}")
+            if best_score > threshold:
+                print("   ✅ Passed (>0.8)")
+            else:
+                print("   ❌ Failed (<=0.8)")
+                all_passed = False
+        else:
+            print("   ❌ No documents retrieved")
+            all_passed = False
+    
+    return all_passed
+
+
 # -----------------------------
 # Example usage
 # -----------------------------
@@ -221,7 +260,19 @@ if __name__ == "__main__":
     # Example: Ingest a PDF if it exists
     # ingest_pdf_to_chroma("votre_document.pdf")
 
-    user_query = input("Enter your question: ")
+    # Test similarity on sample KB entries
+    sample_queries = [
+        "Comment réinitialiser mon mot de passe?",
+        "Quels sont les délais de livraison?",
+        "Quand est disponible le support technique?",
+        "Puis-je retourner un article?"
+    ]
+    
+    print("--- TESTING SIMILARITY >0.8 ON KB SAMPLE ---")
+    test_passed = test_similarity_on_kb_sample(sample_queries, threshold=0.8)
+    print(f"\nOverall test result: {'✅ PASSED' if test_passed else '❌ FAILED'}")
+    
+    user_query = input("\nEnter your question: ")
     result = solution_finder(user_query)
 
     print("\n--- RAG RESULT ---\n")

@@ -21,6 +21,7 @@ class AgentManager:
         self.prechecker = TicketPrechecker()
         self.evaluator = DeterministicEvaluator()
         self.model = "mistral-large-latest"
+        self.confidence_threshold = 0.6
         
         # Mock Knowledge Base
         self.knowledge_base = [
@@ -112,14 +113,17 @@ class AgentManager:
             query=query_for_rag,
             context=context_used,
             response=proposed_answer,
-            retrieval_score=best_retrieval_score
+            retrieval_score=best_retrieval_score,
+            threshold=self.confidence_threshold
         )
         print(f"📊 Score de confiance global : {evaluation['confidence_score']}")
         print(f"   - Pertinence (Doc vs Question) : {evaluation['relevance_score']}")
         print(f"   - Fidélité (Réponse vs Doc) : {evaluation['faithfulness_score']}")
         
-        # Step 5 & 5.1: Logic based on confidence
-        if evaluation["confidence_score"] >= 0.6 and not evaluation.get("is_refusal"):
+        # Step 5 & 5.1: Logic based on confidence and sentiment
+        is_negative = analysis.get("sentiment") == "negative"
+        
+        if evaluation["confidence_score"] >= self.confidence_threshold and not evaluation.get("is_refusal") and not is_negative:
             print(f"✅ Confiance élevée. Composition de la réponse finale...")
             # Step 5: Response Composer (LLM)
             final_response_data = compose_response(content_to_process, proposed_answer, evaluation)
@@ -139,12 +143,18 @@ class AgentManager:
             }
         else:
             # Step 5.1: Orient to specialist human agent (NO LLM)
-            if evaluation.get("is_refusal"):
+            if is_negative:
+                print(f"⚠️ Émotion négative détectée. Escalade immédiate vers un agent humain...")
+                reason = "Negative sentiment detected"
+            elif evaluation.get("is_refusal"):
                 print(f"⚠️ L'IA n'a pas trouvé de réponse dans les documents. Orientation vers un agent humain...")
+                reason = "No information found in KB"
             else:
                 print(f"⚠️ Confiance faible ({evaluation['confidence_score']}). Orientation vers un agent humain...")
+                reason = f"Low confidence score ({evaluation['confidence_score']})"
             
             result = self.orient_to_human(analysis, precheck_results)
+            result["reason"] = reason
             print(f"👨‍💼 Orienté vers : {result['orientation']['target_department']}")
             return result
 

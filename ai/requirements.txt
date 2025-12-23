@@ -4,3 +4,7 @@ langdetect
 transformers
 torch
 numpy
+langchain
+langchain-mistralai
+langchain-experimental
+chromadb
