@@ -66,7 +66,6 @@ class AgentManager:
             print(f"📝 Résumé : {analysis.get('summary')}")
             print(f"Catégorie : {analysis.get('category')}")
             print(f"🔑 Mots-clés : {', '.join(analysis.get('keywords', []))}")
-            print(f"😊 Sentiment : {analysis.get('sentiment', 'neutral')}")
             
             # Check if the query is in scope for the company
             if not analysis.get("is_in_scope", True):
@@ -121,11 +120,10 @@ class AgentManager:
             print(f"📊 Score de confiance global : {evaluation['confidence_score']}")
             print(f"   - Pertinence (Doc vs Question) : {evaluation['relevance_score']}")
             print(f"   - Fidélité (Réponse vs Doc) : {evaluation['faithfulness_score']}")
+            print(f"   - Sentiment détecté : {evaluation.get('sentiment', 'neutral')}")
             
-            # Step 5 & 5.1: Logic based on confidence and sentiment
-            is_negative = analysis.get("sentiment") == "negative"
-            
-            if evaluation["confidence_score"] >= self.confidence_threshold and not evaluation.get("is_refusal") and not is_negative:
+            # Step 5 & 5.1: Logic based on confidence
+            if evaluation["confidence_score"] >= self.confidence_threshold and not evaluation.get("is_refusal"):
                 print(f"✅ Confiance élevée. Composition de la réponse finale...")
                 # Step 5: Response Composer (LLM)
                 final_response_data = compose_response(content_to_process, proposed_answer, evaluation)
@@ -145,10 +143,7 @@ class AgentManager:
                 }
             else:
                 # Step 5.1: Orient to specialist human agent (NO LLM)
-                if is_negative:
-                    print(f"⚠️ Émotion négative détectée. Escalade immédiate vers un agent humain...")
-                    reason = "Negative sentiment detected"
-                elif evaluation.get("is_refusal"):
+                if evaluation.get("is_refusal"):
                     print(f"⚠️ L'IA n'a pas trouvé de réponse dans les documents. Orientation vers un agent humain...")
                     reason = "No information found in KB"
                 else:

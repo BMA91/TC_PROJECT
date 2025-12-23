@@ -46,10 +46,13 @@ Your task is to:
 7. Identify the 'agent_role' to route the query to:
    - 'agt_tech': if the query is technical, related to bugs, errors, setup, or user guides.
    - 'agt_sales': if the query is commercial, related to pricing, contracts, or legal frameworks.
-8. Detect the 'sentiment' of the user:
-   - 'negative': if the user is frustrated, angry, or reporting a critical failure.
-   - 'neutral': for standard questions.
-   - 'positive': for thanks or positive feedback.
+8. Evaluate if the query is sufficient (detailed enough) to find a precise solution.
+9. Evaluate if the query is 'is_in_scope':
+   - True if it's related to Doxa, technical support, user guides, or professional services.
+   - False if it's completely unrelated (e.g., cooking, sports, general jokes, other companies).
+10. Provide an 'optimized_query':
+   - If the query is too short or vague, expand it by detailing the likely technical context.
+   - Replace common words with technical synonyms to improve search results (RAG).
 
 
 Respond ONLY in JSON format:
@@ -58,7 +61,11 @@ Respond ONLY in JSON format:
     "keywords": ["...", "..."],
     "category": "...",
     "agent_role": "agt_tech" | "agt_sales",
-    "sentiment": "negative" | "neutral" | "positive",
+    "is_sufficient": true,
+    "is_in_scope": true,
+    "optimized_query": "..."
+}"""
+
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": query}
