@@ -1,8 +1,9 @@
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 from typing import Optional
+import json
 
-from app.models.ticket import Ticket, TicketType, TicketStatus, TicketFeedback
+from app.models.ticket import Ticket, TicketType, TicketStatus, TicketFeedback, AIPipelineLog
 from app.schemas.ticket import TicketCreate, TicketUpdate, TicketFeedbackCreate, AgentResponseCreate
 
 
@@ -313,4 +314,169 @@ def get_escalated_tickets(
     tickets = query.offset(skip).limit(limit).all()
     
     return tickets
+
+
+# ========== AI PIPELINE LOG CRUD FUNCTIONS ==========
+
+def create_ai_pipeline_log(db: Session, ticket_id: int, trace_id: str) -> AIPipelineLog:
+    """
+    Crée un nouveau log de pipeline AI pour un ticket.
+    
+    Args:
+        db: Session de base de données
+        ticket_id: ID du ticket
+        trace_id: ID de traçabilité pour le suivi
+    
+    Returns:
+        Le log créé
+    """
+    log = AIPipelineLog(
+        ticket_id=ticket_id,
+        trace_id=trace_id,
+        status="processing"
+    )
+    db.add(log)
+    db.commit()
+    db.refresh(log)
+    return log
+
+
+def update_ai_pipeline_log_with_results(
+    db: Session, 
+    log_id: int, 
+    ai_results: dict,
+    processing_time: float | None = None,
+    error_message: str | None = None
+) -> AIPipelineLog | None:
+    """
+    Met à jour un log de pipeline AI avec les résultats du traitement.
+    
+    Args:
+        db: Session de base de données
+        log_id: ID du log à mettre à jour
+        ai_results: Résultats du traitement AI
+        processing_time: Temps de traitement en secondes
+        error_message: Message d'erreur si échec
+    
+    Returns:
+        Le log mis à jour ou None si non trouvé
+    """
+    log = db.query(AIPipelineLog).filter(AIPipelineLog.id == log_id).first()
+    if not log:
+        return None
+    
+    # Update status
+    if error_message:
+        log.status = "failed"
+        log.error_message = error_message
+    else:
+        log.status = "completed"
+    
+    log.completed_at = datetime.now(timezone.utc)
+    log.processing_time_seconds = processing_time
+    
+    # Extract results from ai_results
+    if "analysis" in ai_results:
+        analysis = ai_results["analysis"]
+        log.summary = analysis.get("summary")
+        log.keywords = json.dumps(analysis.get("keywords", []))
+        log.category = analysis.get("category")
+    
+    if "rag_result" in ai_results:
+        rag = ai_results["rag_result"]
+        # Store used documents with scores
+        docs_info = [
+            {
+                "title": doc.get("title", ""),
+                "score": doc.get("score", 0.0),
+                "content_preview": doc.get("content", "")[:200] + "..." if doc.get("content") else ""
+            }
+            for doc in rag.get("used_documents", [])
+        ]
+        log.rag_docs = json.dumps(docs_info)
+        log.proposed_answer = rag.get("answer")
+    
+    if "evaluation" in ai_results:
+        eval_data = ai_results["evaluation"]
+        log.confidence_score = eval_data.get("confidence_score")
+        log.sentiment = eval_data.get("sentiment")
+        log.sensitive_data_detected = eval_data.get("sensitive_data", False)
+    
+    if "status" in ai_results:
+        if ai_results["status"] == "escalated":
+            log.escalation_reason = ai_results.get("reason", "Unknown")
+        elif ai_results["status"] == "success":
+            log.final_response = ai_results.get("final_response")
+    
+    db.commit()
+    db.refresh(log)
+    return log
+
+
+def get_ai_pipeline_logs_by_ticket(db: Session, ticket_id: int) -> list[AIPipelineLog]:
+    """
+    Récupère tous les logs de pipeline AI pour un ticket.
+    
+    Args:
+        db: Session de base de données
+        ticket_id: ID du ticket
+    
+    Returns:
+        Liste des logs pour ce ticket
+    """
+    return db.query(AIPipelineLog).filter(AIPipelineLog.ticket_id == ticket_id).order_by(AIPipelineLog.started_at.desc()).all()
+
+
+def get_latest_ai_pipeline_log(db: Session, ticket_id: int) -> AIPipelineLog | None:
+    """
+    Récupère le dernier log de pipeline AI pour un ticket.
+    
+    Args:
+        db: Session de base de données
+        ticket_id: ID du ticket
+    
+    Returns:
+        Le dernier log ou None
+    """
+    return db.query(AIPipelineLog).filter(AIPipelineLog.ticket_id == ticket_id).order_by(AIPipelineLog.started_at.desc()).first()
+
+
+def update_ticket_with_ai_results(db: Session, ticket_id: int, ai_results: dict) -> Ticket | None:
+    """
+    Met à jour un ticket avec les résultats du traitement AI.
+    
+    Args:
+        db: Session de base de données
+        ticket_id: ID du ticket
+        ai_results: Résultats du traitement AI
+    
+    Returns:
+        Le ticket mis à jour ou None
+    """
+    ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+    if not ticket:
+        return None
+    
+    # Update ticket based on AI results
+    if ai_results["status"] == "escalated":
+        ticket.is_escalated = True
+        ticket.escalated_at = datetime.now(timezone.utc)
+        # Set category if detected
+        if "analysis" in ai_results and ai_results["analysis"].get("category"):
+            ticket.category = ai_results["analysis"]["category"]
+        # Set summary if available
+        if "analysis" in ai_results and ai_results["analysis"].get("summary"):
+            ticket.summary = ai_results["analysis"]["summary"]
+    
+    elif ai_results["status"] == "success":
+        # AI handled it successfully - ticket stays as is but we store the response
+        # The response is stored in the pipeline log
+        if "analysis" in ai_results and ai_results["analysis"].get("category"):
+            ticket.category = ai_results["analysis"]["category"]
+        if "analysis" in ai_results and ai_results["analysis"].get("summary"):
+            ticket.summary = ai_results["analysis"]["summary"]
+    
+    db.commit()
+    db.refresh(ticket)
+    return ticket
 

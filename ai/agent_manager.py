@@ -2,11 +2,11 @@ import os
 import json
 from dotenv import load_dotenv
 from mistralai import Mistral
-from precheck import TicketPrechecker
-from queryanalyser import analyse_query
-from solutionfinder import solution_finder
-from deterministic_evaluation import DeterministicEvaluator
-from response_composer import compose_response
+from .precheck import TicketPrechecker
+from .queryanalyser import analyse_query
+from .solutionfinder import solution_finder
+from .deterministic_evaluation import DeterministicEvaluator
+from .response_composer import compose_response
 import uuid
 import structlog
 from tenacity import retry, stop_after_attempt, wait_exponential

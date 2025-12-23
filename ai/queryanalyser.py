@@ -7,7 +7,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 from circuitbreaker import circuit
 
 # Load environment variables from .env
-load_dotenv(find_dotenv())
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '.env'))
 API_KEY = os.environ.get("MISTRAL_API_KEY")
 if not API_KEY:
     raise ValueError("Please set MISTRAL_API_KEY in your .env file")

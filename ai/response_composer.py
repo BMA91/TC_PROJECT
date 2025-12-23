@@ -12,7 +12,7 @@ from langdetect.lang_detect_exception import LangDetectException
 DetectorFactory.seed = 0
 
 # Load env
-load_dotenv(find_dotenv())
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '.env'))
 API_KEY = os.getenv("MISTRAL_API_KEY")
 if not API_KEY:
     raise ValueError("MISTRAL_API_KEY not found")
