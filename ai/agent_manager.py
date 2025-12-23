@@ -53,12 +53,9 @@ class AgentManager:
                 }
             
             print("✅ Pré-vérification réussie.")
-            if precheck_results["has_sensitive_data"]:
-                print("⚠️ Données sensibles détectées et masquées.")
-                print(f"🔍 Contenu sécurisé : {precheck_results['masked_content']}")
 
-            # Use masked content for the AI agent
-            content_to_process = precheck_results["masked_content"]
+            # Use raw content for the AI agent (Masking moved to evaluation)
+            content_to_process = ticket_content
             
             # Step 2: Query Analyser (LLM CALL)
             print("\n[Étape 2] Analyse de la requête...")
@@ -121,10 +118,23 @@ class AgentManager:
             print(f"   - Pertinence (Doc vs Question) : {evaluation['relevance_score']}")
             print(f"   - Fidélité (Réponse vs Doc) : {evaluation['faithfulness_score']}")
             print(f"   - Sentiment détecté : {evaluation.get('sentiment', 'neutral')}")
+            print(f"   - Données sensibles détectées : {evaluation.get('has_sensitive_data', False)}")
+            print(f"   - Raison de l'évaluation : {evaluation.get('reason', 'N/A')}")
             
-            # Step 5 & 5.1: Logic based on confidence
-            if evaluation["confidence_score"] >= self.confidence_threshold and not evaluation.get("is_refusal"):
-                print(f"✅ Confiance élevée. Composition de la réponse finale...")
+            # Step 5 & 5.1: Logic based on confidence and safety
+            # Escalation triggers: 
+            # 1. Sensitive data detected (100% escalation)
+            # 2. Confidence score < 0.6
+            # 3. LLM refused to answer (no info found)
+            
+            should_escalate = (
+                evaluation.get("has_sensitive_data", False) or 
+                evaluation["confidence_score"] < self.confidence_threshold or
+                evaluation.get("is_refusal", False)
+            )
+
+            if not should_escalate:
+                print(f"✅ Confiance élevée et sécurité validée. Composition de la réponse finale...")
                 # Step 5: Response Composer (LLM)
                 final_response_data = compose_response(content_to_process, proposed_answer, evaluation)
                 
@@ -143,7 +153,10 @@ class AgentManager:
                 }
             else:
                 # Step 5.1: Orient to specialist human agent (NO LLM)
-                if evaluation.get("is_refusal"):
+                if evaluation.get("has_sensitive_data", False):
+                    print(f"🚨 Données sensibles détectées ! Escalade immédiate vers un agent humain...")
+                    reason = "Sensitive data detected (PII)"
+                elif evaluation.get("is_refusal"):
                     print(f"⚠️ L'IA n'a pas trouvé de réponse dans les documents. Orientation vers un agent humain...")
                     reason = "No information found in KB"
                 else:

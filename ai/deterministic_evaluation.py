@@ -46,6 +46,19 @@ Evaluate the following criteria:
 2. Relevance: Does the context contain the information needed to answer the query? (Score 0.0 to 1.0)
 3. Sentiment: Detect the user's emotion in the query. Is it 'negative' (frustrated, angry), 'neutral', or 'positive'?
 4. Refusal: Did the AI response state that it couldn't find the information? (True/False)
+5. Sensitive Data: Does the User Query contain ACTUAL sensitive information? 
+   - IMPORTANT: Asking about a procedure (e.g., "How to reset password?") is NOT sensitive.
+   - ONLY mark True if the user provides REAL data like:
+     - Credit Card Numbers (e.g., 4242...)
+     - Email Addresses (e.g., user@example.com)
+     - Phone Numbers
+     - Physical Addresses
+     - ACTUAL Passwords or API Keys (not just the word "password")
+     - Social Security Numbers or National IDs
+     - IBAN or Bank Account Numbers
+     - IP Addresses
+     - Dates of Birth
+   (True/False)
 
 Respond ONLY in JSON format:
 {
@@ -53,6 +66,7 @@ Respond ONLY in JSON format:
     "relevance_score": 0.9,
     "sentiment": "neutral",
     "is_refusal": false,
+    "has_sensitive_data": false,
     "reason": "Brief explanation of the scores"
 }"""
 
