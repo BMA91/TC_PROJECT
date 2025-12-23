@@ -6,7 +6,10 @@ import chromadb
 from chromadb.utils import embedding_functions
 from mistralai import Mistral
 from dotenv import load_dotenv, find_dotenv
-from .pdf_processor import convert_pdf_to_markdown
+try:
+    from .pdf_processor import convert_pdf_to_markdown
+except ImportError:
+    from pdf_processor import convert_pdf_to_markdown
 from langchain_experimental.text_splitter import SemanticChunker
 from langchain_mistralai import MistralAIEmbeddings
 from tenacity import retry, stop_after_attempt, wait_exponential

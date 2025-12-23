@@ -2,11 +2,20 @@ import os
 import json
 from dotenv import load_dotenv
 from mistralai import Mistral
-from .precheck import TicketPrechecker
-from .queryanalyser import analyse_query
-from .solutionfinder import solution_finder
-from .deterministic_evaluation import DeterministicEvaluator
-from .response_composer import compose_response
+
+try:
+    from .precheck import TicketPrechecker
+    from .queryanalyser import analyse_query
+    from .solutionfinder import solution_finder
+    from .deterministic_evaluation import DeterministicEvaluator
+    from .response_composer import compose_response
+except ImportError:
+    from precheck import TicketPrechecker
+    from queryanalyser import analyse_query
+    from solutionfinder import solution_finder
+    from deterministic_evaluation import DeterministicEvaluator
+    from response_composer import compose_response
+
 import uuid
 import structlog
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -82,6 +91,27 @@ class AgentManager:
             
             print("✅ Pré-vérification réussie.")
 
+            # Step 1.1: Immediate Sensitive Data Check (Regex) - BEFORE any LLM call
+            if self.evaluator._detect_sensitive_data(ticket_content):
+                print(f"🚨 Données sensibles détectées dans la requête ! Escalade immédiate vers un agent humain...")
+                escalation_msg = "Votre demande contient des informations sensibles (comme un numéro de carte ou des données personnelles). Pour votre sécurité, nous avons transmis votre dossier directement à un agent humain qui vous répondra par email sécurisé."
+                print("\n" + "-"*30)
+                print("RÉPONSE FINALE :")
+                print(escalation_msg)
+                print("-"*30)
+                return {
+                    "status": "escalated",
+                    "reason": "Sensitive data detected in query (Regex)",
+                    "final_response": escalation_msg,
+                    "precheck": precheck_results,
+                    "evaluation": {
+                        "confidence_score": 0.0,
+                        "sensitive_data": True,
+                        "sentiment": "neutral",
+                        "reason": "Sensitive data detected in query (Regex)"
+                    }
+                }
+
             # Use raw content for the AI agent (Masking moved to evaluation)
             content_to_process = ticket_content
             
@@ -111,6 +141,7 @@ class AgentManager:
 
             # Optimization logic
             query_for_rag = content_to_process
+
             if not analysis.get("is_sufficient", True):
                 print("⚠️ Requête jugée trop courte ou vague. Optimisation en cours...")
                 query_for_rag = analysis.get("optimized_query", content_to_process)

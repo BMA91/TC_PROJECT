@@ -1,5 +1,5 @@
 import re
-from langdetect import detect, DetectorFactory
+from langdetect import detect_langs, DetectorFactory
 from langdetect.lang_detect_exception import LangDetectException
 
 # Ensure consistent results for language detection
@@ -20,31 +20,36 @@ class TicketPrechecker:
         ]
 
     def check_language(self, text):
-        """Verify if the language is French or English with a fallback for short texts."""
-        # Common French and English words to help with short queries
-        language_indicators = [
-            # French
-            "ca", "pas", "le", "la", "les", "un", "une", "est", "sont", 
-            "fait", "marche", "probleme", "aide", "svp", "merci", "mon", "ma", "salut", "bonjour",
-            # English
-            "hi", "hello", "the", "is", "are", "not", "it", "works", "problem", "help", "please", "thanks", "my"
-        ]
-        
-        text_lower = text.lower()
-        
-        # If the text contains common indicators, we are more lenient
-        has_indicator = any(f" {word} " in f" {text_lower} " for word in language_indicators)
-        
+        """Verify if the language is French or English with high confidence."""
+        if len(text.strip()) < 10:
+            # Too short to detect reliably, check for very specific keywords
+            short_indicators = ["aide", "help", "svp", "please", "merci", "thanks", "bug"]
+            return any(word in text.lower() for word in short_indicators)
+
         try:
-            lang = detect(text)
-            if lang in ['fr', 'en']:
-                return True
-            # If langdetect is unsure but we have indicators, we accept it
-            if has_indicator:
-                return True
+            # Get all detected languages with their probabilities
+            predictions = detect_langs(text)
+            
+            # We want 'fr' or 'en' to be the top prediction with a decent confidence
+            # or at least present with high confidence
+            for pred in predictions:
+                if pred.lang in ['fr', 'en'] and pred.prob > 0.8:
+                    return True
+                
+            # If top prediction is fr/en even with lower confidence, we check for specific indicators
+            top_lang = predictions[0].lang
+            if top_lang in ['fr', 'en'] and predictions[0].prob > 0.5:
+                # Specific French/English words that are less likely to be in Spanish/Italian
+                strong_indicators = [
+                    "est", "sont", "fait", "marche", "probleme", "bonjour", "salut",
+                    "the", "is", "are", "works", "problem", "hello", "thanks"
+                ]
+                if any(f" {word} " in f" {text.lower()} " for word in strong_indicators):
+                    return True
+
             return False
         except LangDetectException:
-            return has_indicator
+            return False
 
     def is_spam(self, text):
         """Check for common spam keywords."""

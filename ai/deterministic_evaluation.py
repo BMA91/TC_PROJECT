@@ -19,7 +19,7 @@ class DeterministicEvaluator:
 
     # Patterns for sensitive data
     SENSITIVE_PATTERNS = [
-        r"\b\d{13,19}\b",  # credit card numbers
+        r"\b(?:\d[ -]*?){12,18}\d\b",  # credit card numbers (13-19 digits with spaces/dashes)
         r"\b[\w\.-]+@[\w\.-]+\.\w{2,4}\b",  # emails
         r"\b(?:\+?\d{1,3}[-.\s]?)?\(?\d{2,4}\)?(?:[-.\s]?\d{2,4}){3,5}\b"  # phone numbers
     ]

@@ -63,16 +63,16 @@ Fallbacks intelligents. Circuit breaker (retries 3x). Logging structuré avec tr
 
 Intégration au Back-
 end
-
+✅ IMPLEMENTED
 7 APIs cohérentes. Webhooks ou polling. Sauvegarde async des résultats. Gestion des timeouts.
 
 11
 Stockage des
 Résultats IA
 
-7 Tables : summary, keywords, rag_docs, response, confidence, escalade_reason. Index optimisés.
+ Tables : summary, keywords, rag_docs, response, confidence, escalade_reason. Index optimisés.
 
-12 Prompt Engineering 7 rediger un bon system prompt : rôle, format, etc.
+12 Prompt Engineering  rediger un bon system prompt : rôle, format, etc.
 TOTAL PRINCIPAL 100 _/100
 # Bonus
 

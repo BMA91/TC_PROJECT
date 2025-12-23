@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from datetime import datetime, timezone
 from typing import Optional
 import json
@@ -330,11 +331,147 @@ def get_escalated_tickets(
     elif has_response is False:
         query = query.filter(Ticket.agent_response.is_(None))
     
-    # Trier par date d'escalade (plus récent en premier)
-    query = query.order_by(Ticket.escalated_at.desc())
-    
     # Appliquer la pagination
     tickets = query.offset(skip).limit(limit).all()
     
     return tickets
+
+
+def create_ai_pipeline_log(db: Session, ticket_id: int, trace_id: str) -> AIPipelineLog:
+    """Crée un nouveau log de pipeline AI"""
+    log = AIPipelineLog(
+        ticket_id=ticket_id,
+        trace_id=trace_id,
+        status="processing"
+    )
+    db.add(log)
+    db.commit()
+    db.refresh(log)
+    return log
+
+
+def update_ai_pipeline_log_with_results(
+    db: Session, 
+    log_id: int, 
+    ai_results: dict,
+    processing_time: float | None = None,
+    error_message: str | None = None
+) -> AIPipelineLog | None:
+    """Met à jour un log de pipeline AI avec les résultats"""
+    log = db.query(AIPipelineLog).filter(AIPipelineLog.id == log_id).first()
+    if not log:
+        return None
+    
+    if error_message:
+        log.status = "failed"
+        log.error_message = error_message
+    else:
+        log.status = "completed"
+    
+    log.completed_at = datetime.now(timezone.utc)
+    log.processing_time_seconds = processing_time
+    
+    if "analysis" in ai_results:
+        analysis = ai_results["analysis"]
+        log.summary = analysis.get("summary")
+        log.keywords = json.dumps(analysis.get("keywords", []))
+        log.category = analysis.get("category")
+    
+    if "rag_result" in ai_results:
+        rag = ai_results["rag_result"]
+        docs_info = [
+            {
+                "title": doc.get("title", ""),
+                "score": doc.get("score", 0.0),
+                "content_preview": doc.get("content", "")[:200] + "..." if doc.get("content") else ""
+            }
+            for doc in rag.get("used_documents", [])
+        ]
+        log.rag_docs = json.dumps(docs_info)
+        log.proposed_answer = rag.get("answer")
+    
+    if "evaluation" in ai_results:
+        eval_data = ai_results["evaluation"]
+        log.confidence_score = eval_data.get("confidence")
+        log.sentiment = eval_data.get("sentiment")
+        log.sensitive_data_detected = eval_data.get("sensitive_data", False)
+    
+    if "status" in ai_results:
+        if ai_results["status"] == "escalated":
+            log.escalation_reason = ai_results.get("reason", "Unknown")
+        elif ai_results["status"] == "success":
+            log.final_response = ai_results.get("final_response")
+    
+    db.commit()
+    db.refresh(log)
+    return log
+
+
+def update_ticket_with_ai_results(db: Session, ticket_id: int, ai_results: dict) -> Ticket | None:
+    """Met à jour le ticket avec les résultats de l'IA (catégorie, escalade)"""
+    ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+    if not ticket:
+        return None
+    
+    if "analysis" in ai_results:
+        ticket.category = ai_results["analysis"].get("category")
+        ticket.summary = ai_results["analysis"].get("summary")
+    
+    if ai_results.get("status") == "escalated":
+        ticket.is_escalated = True
+        ticket.escalated_at = datetime.now(timezone.utc)
+    
+    db.commit()
+    db.refresh(ticket)
+    return ticket
+
+
+def get_ai_pipeline_logs_by_ticket(db: Session, ticket_id: int) -> list[AIPipelineLog]:
+    """Récupère tous les logs de pipeline AI pour un ticket"""
+    return db.query(AIPipelineLog).filter(AIPipelineLog.ticket_id == ticket_id).order_by(AIPipelineLog.started_at.desc()).all()
+
+
+def get_latest_ai_pipeline_log(db: Session, ticket_id: int) -> AIPipelineLog | None:
+    """Récupère le dernier log de pipeline AI pour un ticket"""
+    return db.query(AIPipelineLog).filter(AIPipelineLog.ticket_id == ticket_id).order_by(AIPipelineLog.started_at.desc()).first()
+
+
+def calculate_client_satisfaction_rate(db: Session) -> float:
+    """Calcule le taux de satisfaction global (is_satisfied == True)"""
+    total = db.query(TicketFeedback).count()
+    if total == 0:
+        return 0.0
+    satisfied = db.query(TicketFeedback).filter(TicketFeedback.is_satisfied == True).count()
+    return (satisfied / total) * 100
+
+
+def get_satisfaction_by_rating_distribution(db: Session) -> dict:
+    """Retourne la distribution des notes (1-5)"""
+    distribution = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
+    results = db.query(TicketFeedback.rating, func.count(TicketFeedback.id)).group_by(TicketFeedback.rating).all()
+    for rating, count in results:
+        if rating in distribution:
+            distribution[rating] = count
+    return distribution
+
+
+def get_recent_satisfaction_feedbacks(db: Session, limit: int = 10) -> list[TicketFeedback]:
+    """Récupère les derniers feedbacks reçus"""
+    return db.query(TicketFeedback).order_by(TicketFeedback.id.desc()).limit(limit).all()
+
+
+def get_satisfaction_dashboard(db: Session) -> dict:
+    """Retourne un résumé complet pour le dashboard admin"""
+    
+    total_feedback = db.query(TicketFeedback).count()
+    avg_rating = db.query(func.avg(TicketFeedback.rating)).scalar() or 0.0
+    satisfaction_rate = calculate_client_satisfaction_rate(db)
+    
+    return {
+        "total_feedback": total_feedback,
+        "average_rating": round(float(avg_rating), 2),
+        "satisfaction_rate": round(satisfaction_rate, 2),
+        "rating_distribution": get_satisfaction_by_rating_distribution(db),
+        "recent_feedbacks": get_recent_satisfaction_feedbacks(db)
+    }
 
