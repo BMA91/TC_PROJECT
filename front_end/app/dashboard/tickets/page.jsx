@@ -12,7 +12,7 @@ const PAGE_SIZE = 6;
 
 export default function TicketsPage() {
   const context = useContext(LoginContext);
-  const { loginData } = context ?? {};
+  const { loginData, setLoginData } = context ?? {};
   const router = useRouter();
 
   const [menu, setMenu] = useState(false);
@@ -113,7 +113,19 @@ export default function TicketsPage() {
                 Modify
               </button>
               <hr className="my-3 border-white/30" />
-              <button className="text-red-400 text-left">Logout</button>
+              <button
+                onClick={() => {
+                  try {
+                    localStorage.removeItem("isAuth");
+                    localStorage.removeItem("userData");
+                  } catch (e) {}
+                  setLoginData?.(null);
+                  router.push("/auth");
+                }}
+                className="text-red-400 text-left"
+              >
+                Logout
+              </button>
             </div>
           )}
         </div>

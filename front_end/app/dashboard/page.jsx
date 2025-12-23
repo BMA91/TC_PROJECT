@@ -75,20 +75,19 @@ export default function Dashboard() {
           </button>
           {menu && (
             <div className="absolute right-0 mt-3 w-56 bg-[#0C2155] text-white p-4 rounded-xl">
-              
               <p className="font-semibold">{loginData?.address ?? "User"}</p>
-                <p className="text-[#AAC7FF] text-sm">{loginData?.role ?? "User"}</p>
+              <p className="text-[#AAC7FF] text-sm">
+                {loginData?.role ?? "User"}
+              </p>
 
               <hr className="my-3 border-white/30" />
 
-              
               <button className="border border-white rounded px-2 py-1 mb-3">
                 Modify
               </button>
 
               <hr className="my-3 border-white/30" />
 
-              
               <div className="flex flex-col gap-2">
                 <div className="flex items-center gap-2">
                   <img src="./s" alt="" />
@@ -114,7 +113,19 @@ export default function Dashboard() {
 
                 <hr className="my-2 border-white/30" />
 
-                <button className="text-red-400 text-left" >Logout</button>
+                <button
+                  onClick={() => {
+                    try {
+                      localStorage.removeItem("isAuth");
+                      localStorage.removeItem("userData");
+                    } catch (e) {}
+                    context.setLoginData?.(null);
+                    router.push("/auth");
+                  }}
+                  className="text-red-400 text-left"
+                >
+                  Logout
+                </button>
               </div>
             </div>
           )}
