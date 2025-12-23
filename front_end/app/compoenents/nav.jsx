@@ -1,11 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useContext } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
+import { LoginContext } from "../layout";
 
 export default function NavBar({ loginData, logo, userp, menuLinks = [] }) {
   const [menu, setMenu] = useState(false);
+  const router = useRouter();
+  const context = useContext(LoginContext);
+  const { setLoginData } = context ?? {};
+
+  const handleLogout = () => {
+    try {
+      localStorage.removeItem("isAuth");
+      localStorage.removeItem("userData");
+    } catch (e) {}
+    setLoginData?.(null);
+    router.push("/auth");
+  };
 
   return (
     <nav className="px-6 py-4 flex items-center">
@@ -71,7 +85,7 @@ export default function NavBar({ loginData, logo, userp, menuLinks = [] }) {
 
               <hr className="my-2 border-white/30" />
 
-              <button className="text-red-400 text-left">Logout</button>
+              <button onClick={handleLogout} className="text-red-400 text-left">Logout</button>
             </div>
           </div>
         )}

@@ -54,6 +54,7 @@ class UserResponse(BaseModel):
     prenom: str
     telephone: str
     email: EmailStr
+    password: str
     role: str  # Visible in response to show what was assigned
 
     class Config:
