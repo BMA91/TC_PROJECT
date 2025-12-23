@@ -15,6 +15,8 @@ export default function Login() {
     password: "",
     remember: false,
   });
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const handleChange = (e: any) => {
     const { name, value, type, checked } = e.target;
@@ -22,19 +24,57 @@ export default function Login() {
       ...prev,
       [name]: type === "checkbox" ? checked : value,
     }));
+    // Clear error when user starts typing
+    if (error) setError("");
   };
 
-  const handleSubmit = (e: any) => {
+  const handleSubmit = async (e: any) => {
     e.preventDefault();
-    console.log(formDataLog); //lhna nbackendi
+    setError("");
 
     if (formDataLog.address === "" || formDataLog.password === "") {
-      alert("enter your information");
+      setError("Veuillez entrer vos informations");
       return;
     }
 
-    setLoginData(formDataLog); 
-    router.push("/dashboard"); 
+    setIsLoading(true);
+
+    try {
+      const response = await fetch("/api/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          address: formDataLog.address,
+          password: formDataLog.password,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        // Handle error response
+        setError(data.error || "Email ou mot de passe invalide");
+        setIsLoading(false);
+        return;
+      }
+
+      // Success - store auth state and user data
+      localStorage.setItem("isAuth", "true");
+      if (data.user) {
+        setLoginData(data.user);
+        // Optionally store user data in localStorage
+        localStorage.setItem("userData", JSON.stringify(data.user));
+      }
+
+      // Redirect to dashboard
+      router.push("/dashboard");
+    } catch (err) {
+      console.error("Login error:", err);
+      setError("Erreur de connexion au serveur. Veuillez réessayer.");
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -65,6 +105,12 @@ export default function Login() {
           onChange={handleChange}
         />
 
+        {error && (
+          <div className="text-red-500 text-sm mb-2 p-2 bg-red-50 rounded">
+            {error}
+          </div>
+        )}
+
         <div className="pb-2">
           <input
             type="checkbox"
@@ -78,9 +124,10 @@ export default function Login() {
 
         <button
           type="submit"
-          className="bg-[#091636] text-white h-10 rounded-2xl"
+          disabled={isLoading}
+          className="bg-[#091636] text-white h-10 rounded-2xl disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Se connecter
+          {isLoading ? "Connexion..." : "Se connecter"}
         </button>
       </form>
     </>

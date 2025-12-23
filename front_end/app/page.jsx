@@ -16,7 +16,7 @@ export default function Home() {
 
   return (
     <>
-      <First/>
+      {isAuth ? <First/> : <Auth/>}
     </>
   );
 }
