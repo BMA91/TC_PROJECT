@@ -23,6 +23,12 @@ Interaction flow:
 3. Backend handles auth, persistence, and may call into `ai/` modules or services to perform vector-search/LLM tasks.
 4. AI modules persist vector data in `ai/chroma_db` and use models configured in `ai/requirements.txt`.
 
+### Solutions Clés :
+* **Volet 1 : Authentification & Profils** – Création de compte et accès sécurisé pour les clients et agents spécialisés (Admin, Dev, Commercial).
+* **Volet 2 : Gestion des Tickets** – Cycle de vie complet du ticket, de la soumission au feedback utilisateur (satisfait/non satisfait).
+* **Volet 3 : Pipeline IA Agentique** – Analyse automatique, recherche de solutions via RAG et décision d'escalade intelligente.
+* **Volet 4 : Dashboard** – Métriques en temps réel sur la performance de l'IA, le taux de satisfaction et alertes automatiques.
+
 ## Key files & locations
 
 - Backend entrypoint: `backend/app/main.py`
