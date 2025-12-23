@@ -114,7 +114,7 @@ export default function Dashboard() {
 
                 <hr className="my-2 border-white/30" />
 
-                <button className="text-red-400 text-left">Logout</button>
+                <button className="text-red-400 text-left" >Logout</button>
               </div>
             </div>
           )}

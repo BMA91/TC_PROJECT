@@ -3,18 +3,11 @@ import json
 from dotenv import load_dotenv
 from mistralai import Mistral
 
-try:
-    from .precheck import TicketPrechecker
-    from .queryanalyser import analyse_query
-    from .solutionfinder import solution_finder
-    from .deterministic_evaluation import DeterministicEvaluator
-    from .response_composer import compose_response
-except ImportError:
-    from precheck import TicketPrechecker
-    from queryanalyser import analyse_query
-    from solutionfinder import solution_finder
-    from deterministic_evaluation import DeterministicEvaluator
-    from response_composer import compose_response
+from .precheck import TicketPrechecker
+from .queryanalyser import analyse_query
+from .solutionfinder import solution_finder
+from .deterministic_evaluation import DeterministicEvaluator
+from .response_composer import compose_response
 
 import uuid
 import structlog
