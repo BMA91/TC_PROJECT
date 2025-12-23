@@ -1,0 +1,21 @@
+{
+  "Team": "TEAM 5",
+  "Answers": [
+    {
+      "id": "Q001",
+      "answer": "Merci de nous avoir contacté. Je comprends que vous souhaitez réinitialiser le mot de passe de votre compte Doxa.\n\nVoici comment procéder :\n\n1. Rendez-vous sur la page de connexion de Doxa.\n2. Cliquez sur le lien \"Mot de passe oublié?\".\n3. Vous recevrez un email avec un lien de réinitialisation.\n4. Cliquez sur le lien dans l'email.\n5. Créez un nouveau mot de passe (minimum 8 caractères, avec au moins une majuscule et un chiffre).\n6. Essayez de vous connecter à nouveau avec votre nouveau mot de passe.\n\nN'oubliez pas de choisir un mot de passe fort et unique pour assurer la sécurité de votre compte.\n\nSi vous avez d'autres questions, n'hésitez pas à nous les poser."
+    },
+    {
+      "id": "Q002",
+      "answer": "Demande des délais de livraison pour une commande passée aujourd'hui."
+    },
+    {
+      "id": "Q003",
+      "answer": "**Réponse :**\n\n1. **Acknowledgement / Thanks:**\n   Merci pour votre message. Nous sommes là pour vous aider avec votre demande de retour.\n\n2. **Restatement of the user's problem:**\n   Vous souhaitez retourner un article acheté la semaine dernière.\n\n3. **Proposed solution:**\n   Notre politique \"30 jours satisfaction garantie\" vous permet de retourner l'article et d'obtenir un remboursement intégral, sans avoir à justifier votre retour. Vous avez 30 jours à partir de la date d'achat pour effectuer ce retour.\n\n4. **Next steps or tips:**\n   Pour initier le processus de retour, veuillez consulter notre procédure de remboursement. Nous restons à votre disposition pour toute question supplémentaire."
+    },
+    {
+      "id": "Q004",
+      "answer": "1. **Merci pour votre message** et pour nous avoir informés de cette situation. Nous comprenons l'importance de sécuriser votre compte et nous sommes là pour vous guider.\n\n2. **Vous nous informez que votre compte semble compromis** et vous souhaitez connaître les étapes à suivre pour le sécuriser.\n\n3. **Voici les étapes à suivre pour sécuriser votre compte** :\n   - **Vérifiez votre email** : Assurez-vous que le compte utilise l'email exact avec lequel il a été créé, en vérifiant la casse et le domaine. Si le compte a été créé avec Google ou Microsoft, utilisez la même option de connexion.\n   - **Changez vos mots de passe** : Changez les mots de passe de tous les services où le même mot de passe a été utilisé. Utilisez un gestionnaire de mots de passe comme LastPass ou 1Password pour créer et stocker des mots de passe uniques et sécurisés.\n   - **Réactivez l'authentification à deux facteurs (2FA)** : Accédez aux paramètres de sécurité de votre compte et activez l'authentification à deux facteurs en utilisant une application TOTP (comme Google Authenticator) plutôt que les SMS.\n   - **Vérifiez l'activité de votre compte** : Consultez l'historique de votre compte pour identifier toute activité suspecte ou connexions non autorisées. Si vous trouvez quelque chose d'inhabituel, envoyez un email à security@doxa.dz pour signaler le problème.\n\n4. **Conseils supplémentaires** : En suivant ces étapes, vous pouvez renforcer la sécurité de votre compte et réduire les risques de compromission future. Si vous avez besoin d'une assistance supplémentaire, n'hésitez pas à nous contacter."
+    }
+  ]
+}

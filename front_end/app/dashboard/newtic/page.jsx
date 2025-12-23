@@ -42,6 +42,8 @@ export default function TicketsPage() {
   };
 
   const handleFileChange = (e) => {
+    // File uploads are not supported by the backend ticket create endpoint.
+    // We keep the handler but do not send files to the backend.
     setFormData((prev) => ({ ...prev, attachment: e.target.files[0] }));
   };
 
@@ -49,19 +51,33 @@ export default function TicketsPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      const data = new FormData();
-      data.append("title", formData.title);
-      data.append("description", formData.description);
-      data.append("ticketType", formData.ticketType);
-      if (formData.attachment) data.append("attachment", formData.attachment);
+      // Map frontend ticketType to backend expected ticket_type values
+      let ticket_type = formData.ticketType;
+      if (ticket_type === "Other") ticket_type = "other";
 
-      const res = await fetch("/api/tickets", {
+      const payload = {
+        title: formData.title,
+        description: formData.description,
+        ticket_type: ticket_type,
+      };
+
+      const clientId = loginData?.id;
+      // Use the same server route as the signup page (Next.js API)
+      const url = `/api/tickets?client_id=${clientId}`;
+
+      const res = await fetch(url, {
         method: "POST",
-        body: data,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       });
 
-      if (!res.ok) throw new Error("Failed to create ticket");
-      const ticket = await res.json();
+      const resJson = await res.json().catch(() => null);
+      if (!res.ok) {
+        alert("Ticket creation failed: " + JSON.stringify(resJson));
+        throw new Error("Failed to create ticket");
+      }
+
+      const ticket = resJson;
       alert("Ticket créé avec succès ! ID: " + ticket.id);
 
       setFormData({

@@ -7,10 +7,11 @@ const PAGE_SIZE = 6;
 
 interface Client {
   id: number;
-  name: string;
-  phone: string;
-  email: string;
-  date: string;
+  nom?: string;
+  prenom?: string;
+  telephone?: string;
+  email?: string;
+  created_at?: string;
 }
 
 export default function ClientsPage() {
@@ -26,7 +27,7 @@ export default function ClientsPage() {
   useEffect(() => {
     const fetchClients = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/clients");
+        const res = await fetch("http://127.0.0.1:8000/users/");
         if (!res.ok) throw new Error("Failed to fetch clients");
         const data: Client[] = await res.json();
         setClients(Array.isArray(data) ? data : []);
@@ -44,15 +45,18 @@ export default function ClientsPage() {
     let result = clients;
 
     if (search) {
-      result = result.filter(
-        (c) =>
-          c.name.toLowerCase().includes(search.toLowerCase()) ||
-          c.email.toLowerCase().includes(search.toLowerCase())
-      );
+      const s = search.toLowerCase();
+      result = result.filter((c) => {
+        const fullName = `${c.nom || ""} ${c.prenom || ""}`.trim();
+        return (
+          fullName.toLowerCase().includes(s) ||
+          (c.email || "").toLowerCase().includes(s)
+        );
+      });
     }
 
     if (filter !== "all") {
-      result = result.filter((c) => c.email.includes(filter));
+      result = result.filter((c) => (c.email || "").includes(filter));
     }
 
     return result;
@@ -145,12 +149,12 @@ export default function ClientsPage() {
                   <tr key={client.id} className="border-t">
                     <td className="py-4 flex items-center gap-3">
                       <div className="w-9 h-9 rounded-full bg-blue-600 text-white flex items-center justify-center font-semibold">
-                        {client.name.charAt(0)}
+                        {(client.nom || client.email || "?").charAt(0)}
                       </div>
-                      {client.name}
+                      {`${client.nom || ""} ${client.prenom || ""}`.trim() || client.email}
                     </td>
-                    <td className="py-4">{client.date}</td>
-                    <td className="py-4">{client.phone}</td>
+                    <td className="py-4">{client.created_at ? new Date(client.created_at).toLocaleDateString() : "-"}</td>
+                    <td className="py-4">{client.telephone || "-"}</td>
                     <td className="py-4">{client.email}</td>
                   </tr>
                 ))}

@@ -24,7 +24,7 @@ export default function DashboardPage() {
   useEffect(() => {
     const fetchTickets = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/tickets");
+        const res = await fetch("http://127.0.0.1:8000/tickets/");
         if (!res.ok) throw new Error("Failed to fetch tickets");
 
         const data: Ticket[] = await res.json();
