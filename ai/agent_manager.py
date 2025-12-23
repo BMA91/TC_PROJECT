@@ -7,9 +7,34 @@ from queryanalyser import analyse_query
 from solutionfinder import solution_finder
 from deterministic_evaluation import DeterministicEvaluator
 from response_composer import compose_response
+import uuid
+import structlog
+from tenacity import retry, stop_after_attempt, wait_exponential
+from circuitbreaker import circuit
 
 # Load environment variables
 load_dotenv()
+
+# Configure structured logging
+structlog.configure(
+    processors=[
+        structlog.stdlib.filter_by_level,
+        structlog.stdlib.add_logger_name,
+        structlog.stdlib.add_log_level,
+        structlog.stdlib.PositionalArgumentsFormatter(),
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.processors.StackInfoRenderer(),
+        structlog.processors.format_exc_info,
+        structlog.processors.UnicodeDecoder(),
+        structlog.processors.JSONRenderer()
+    ],
+    context_class=dict,
+    logger_factory=structlog.stdlib.LoggerFactory(),
+    wrapper_class=structlog.stdlib.BoundLogger,
+    cache_logger_on_first_use=True,
+)
+
+logger = structlog.get_logger()
 
 class AgentManager:
     def __init__(self):
@@ -35,7 +60,9 @@ class AgentManager:
         """
         Orchestrate the full ticket processing pipeline.
         """
+        trace_id = str(uuid.uuid4())
         try:
+            logger.info("Starting ticket processing", trace_id=trace_id, ticket_content=ticket_content[:100])
             print("\n" + "="*50)
             print("DÉBUT DU TRAITEMENT DU TICKET")
             print("="*50)
@@ -43,6 +70,7 @@ class AgentManager:
             # Step 1: Precheck
             print("\n[Étape 1] Pré-vérification...")
             precheck_results = self.prechecker.run_precheck(ticket_content)
+            logger.info("Precheck completed", trace_id=trace_id, passed=precheck_results["passed"], reason=precheck_results.get("reason"))
             
             if not precheck_results["passed"]:
                 print(f"❌ Échec de la pré-vérification : {', '.join(precheck_results['reason'])}")
@@ -60,6 +88,7 @@ class AgentManager:
             # Step 2: Query Analyser (LLM CALL)
             print("\n[Étape 2] Analyse de la requête...")
             analysis = analyse_query(content_to_process)
+            logger.info("Query analysis completed", trace_id=trace_id, summary=analysis.get("summary"), category=analysis.get("category"))
             print(f"📝 Résumé : {analysis.get('summary')}")
             print(f"Catégorie : {analysis.get('category')}")
             print(f"🔑 Mots-clés : {', '.join(analysis.get('keywords', []))}")
@@ -93,6 +122,7 @@ class AgentManager:
             # Step 3: Solution Finder (LLM CALL - RAG)
             print("\n[Étape 3] Recherche de solution (RAG)...")
             rag_result = solution_finder(query_for_rag, category=analysis.get("category"))
+            logger.info("Solution finder completed", trace_id=trace_id, fallback_used=rag_result.get("fallback_used"), used_docs=len(rag_result["used_documents"]))
             
             if rag_result.get("fallback_used"):
                 print("ℹ️ Note : La recherche a été étendue à d'autres catégories car aucun document pertinent n'a été trouvé dans la catégorie initiale.")
@@ -111,26 +141,27 @@ class AgentManager:
                 query=query_for_rag,
                 context=context_used,
                 response=proposed_answer,
-                retrieval_score=best_retrieval_score,
-                threshold=self.confidence_threshold
+                retrieval_score=best_retrieval_score
             )
+            logger.info("Evaluation completed", trace_id=trace_id, confidence_score=evaluation["confidence_score"], sensitive_data=evaluation.get("sensitive_data"))
             print(f"📊 Score de confiance global : {evaluation['confidence_score']}")
-            print(f"   - Pertinence (Doc vs Question) : {evaluation['relevance_score']}")
-            print(f"   - Fidélité (Réponse vs Doc) : {evaluation['faithfulness_score']}")
-            print(f"   - Sentiment détecté : {evaluation.get('sentiment', 'neutral')}")
-            print(f"   - Données sensibles détectées : {evaluation.get('has_sensitive_data', False)}")
+            print(f"   - Données sensibles détectées : {evaluation.get('sensitive_data', False)}")
             print(f"   - Raison de l'évaluation : {evaluation.get('reason', 'N/A')}")
+            print(f"   - Sentiment détecté : {evaluation.get('sentiment', 'neutral')}")
+            print(f"   - Non standard : {evaluation.get('non_standard', False)}")
             
             # Step 5 & 5.1: Logic based on confidence and safety
             # Escalation triggers: 
             # 1. Sensitive data detected (100% escalation)
             # 2. Confidence score < 0.6
             # 3. LLM refused to answer (no info found)
+            # 4. User is angry
             
             should_escalate = (
-                evaluation.get("has_sensitive_data", False) or 
+                evaluation.get("sensitive_data", False) or 
                 evaluation["confidence_score"] < self.confidence_threshold or
-                evaluation.get("is_refusal", False)
+                evaluation.get("is_refusal", False) or
+                evaluation.get("sentiment") == "angry"
             )
 
             if not should_escalate:
@@ -153,9 +184,12 @@ class AgentManager:
                 }
             else:
                 # Step 5.1: Orient to specialist human agent (NO LLM)
-                if evaluation.get("has_sensitive_data", False):
+                if evaluation.get("sensitive_data", False):
                     print(f"🚨 Données sensibles détectées ! Escalade immédiate vers un agent humain...")
                     reason = "Sensitive data detected (PII)"
+                elif evaluation.get("sentiment") == "angry":
+                    print(f"🚨 Utilisateur en colère ! Escalade immédiate vers un agent humain...")
+                    reason = "User is angry"
                 elif evaluation.get("is_refusal"):
                     print(f"⚠️ L'IA n'a pas trouvé de réponse dans les documents. Orientation vers un agent humain...")
                     reason = "No information found in KB"
@@ -259,5 +293,6 @@ if __name__ == "__main__":
                 except Exception as e:
                     print(f"Erreur lors de l'évaluation : {e}")
         except Exception as e:
+            logger.error("Unexpected error in pipeline", trace_id=trace_id, error=str(e), exc_info=True)
             print(f"\n❌ Une erreur inattendue est survenue : {e}")
             print("Veuillez vérifier votre connexion internet et réessayer.")

@@ -9,6 +9,8 @@ from dotenv import load_dotenv, find_dotenv
 from pdf_processor import convert_pdf_to_markdown
 from langchain_experimental.text_splitter import SemanticChunker
 from langchain_mistralai import MistralAIEmbeddings
+from tenacity import retry, stop_after_attempt, wait_exponential
+from circuitbreaker import circuit
 
 # Load env
 load_dotenv(find_dotenv())
@@ -82,7 +84,7 @@ def ingest_pdf_to_chroma(pdf_path: str, category: str = "general", collection_na
 # -----------------------------
 # RAG Core
 # -----------------------------
-def retrieve_from_chroma(query, category: str = None, collection_name="ticket_knowledge_base", k=3):
+def retrieve_from_chroma(query, category: str = None, collection_name="ticket_knowledge_base", k=5):
     collection = get_or_create_collection(collection_name)
     
     # Prepare filter if category is provided
@@ -175,7 +177,9 @@ def is_refusal(answer: str) -> bool:
 # -----------------------------
 # Main API
 # -----------------------------
-def solution_finder(query, category: str = None, collection_name="ticket_knowledge_base", top_k=3):
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+@circuit(failure_threshold=3, recovery_timeout=60)
+def solution_finder(query, category: str = None, collection_name="ticket_knowledge_base", top_k=5):
     """
     Finds a solution by searching in the specified category first.
     If no relevant documents are found OR if the answer is a refusal,

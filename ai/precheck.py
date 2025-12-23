@@ -94,8 +94,6 @@ if __name__ == "__main__":
         print(f"  Passed: {results['passed']}")
         print(f"  Supported Lang: {results['is_supported_lang']}")
         print(f"  Spam: {results['is_spam']}")
-        print(f"  Sensitive Data: {results['has_sensitive_data']}")
-        print(f"  Masked Content: {results['masked_content']}")
         if results['reason']:
             print(f"  Reasons: {', '.join(results['reason'])}")
         print("-" * 30)
