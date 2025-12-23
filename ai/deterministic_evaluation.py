@@ -21,7 +21,7 @@ class DeterministicEvaluator:
     SENSITIVE_PATTERNS = [
         r"\b\d{13,19}\b",  # credit card numbers
         r"\b[\w\.-]+@[\w\.-]+\.\w{2,4}\b",  # emails
-        r"\+?\d[\d\s\-]{7,15}\b"  # phone numbers
+        r"\b(?:\+?\d{1,3}[-.\s]?)?\(?\d{2,4}\)?(?:[-.\s]?\d{2,4}){3,5}\b"  # phone numbers
     ]
 
     def __init__(self, confidence_threshold: float = 0.6):
@@ -33,7 +33,21 @@ class DeterministicEvaluator:
         self.threshold = confidence_threshold
 
     def _detect_sensitive_data(self, text: str) -> bool:
-        return any(re.search(p, text) for p in self.SENSITIVE_PATTERNS)
+        for i, p in enumerate(self.SENSITIVE_PATTERNS):
+            matches = re.finditer(p, text)
+            for m in matches:
+                match_text = m.group()
+                # For phone numbers (index 2), ensure at least 10 digits in the match itself
+                if i == 2:
+                    digit_count = sum(c.isdigit() for c in match_text)
+                    if digit_count >= 10:
+                        # Check if it's not just a sequence of steps like "1. ... 2. ... 10."
+                        # A real phone number usually doesn't have words in between digits
+                        # but our regex already handles some separators.
+                        return True
+                else:
+                    return True
+        return False
 
     def evaluate(self, query: str, context: str, response: str, retrieval_score: float = 0.5) -> dict:
         """
@@ -44,9 +58,10 @@ class DeterministicEvaluator:
         if not context or len(context.strip()) < 20:
             return self._escalation_payload(
                 confidence=0.0,
-                negative_emotion=False,
+                sentiment="neutral",
                 sensitive_data=False,
                 non_standard=True,
+                is_refusal=False,
                 reason="No reliable context",
                 query=query,
                 response=response
@@ -57,20 +72,28 @@ You are an expert evaluator for a support RAG system.
 
 Your task:
 1. Assign a GLOBAL CONFIDENCE SCORE (0.0 to 1.0) for the AI response based on the context.
-2. Detect:
-   - Negative emotions (anger, frustration)
-   - Sensitive data (cards, emails, phones)
+3. Detect the sentiment of the USER QUERY:
+   - "positive": happy, thankful, satisfied.
+   - "neutral": objective, just asking a question.
+   - "frustrated": annoyed, impatient, but still polite.
+   - "angry": upset, using strong language, or very demanding.
+4. Detect:
+   - Sensitive data (credit cards, private emails, private phone numbers). 
+     NOTE: Do NOT flag public support emails (e.g., support@doxa.fr), support phone numbers, company contact info, login attempts, or general frustration as sensitive data.
    - Non-standard or ambiguous requests
-3. Escalate if:
+   - Refusal: true if the AI response says it doesn't know or cannot answer.
+5. Escalate if:
    - Confidence < 0.6
-   - Sensitive data detected
+   - Sensitive data (PII) detected in the AI response.
+   - Sentiment is "angry".
 
 Respond ONLY in valid JSON:
 {
   "confidence": 0.0-1.0,
-  "negative_emotion": true/false,
+  "sentiment": "positive" | "neutral" | "frustrated" | "angry",
   "sensitive_data": true/false,
   "non_standard": true/false,
+  "is_refusal": true/false,
   "reason": "short explanation"
 }
 """
@@ -105,19 +128,36 @@ AI RESPONSE:
             # Confidence + soft retrieval bonus
             confidence = round((0.8 * float(result.get("confidence", 0.0)) + 0.2 * retrieval_score), 2)
 
-            # Detect sensitive data
-            sensitive_data_detected = self._detect_sensitive_data(response) or result.get("sensitive_data", False)
+            # Detect sensitive data (Regex on query/response + LLM check)
+            regex_sensitive = self._detect_sensitive_data(query) or self._detect_sensitive_data(response)
+            llm_sensitive = result.get("sensitive_data", False)
+            
+            # Trust LLM more for emails/phones (often support info), but keep Regex for credit cards
+            sensitive_data_detected = llm_sensitive
+            reason = result.get("reason", "")
+
+            if regex_sensitive and not llm_sensitive:
+                # Check if it's a credit card (Pattern 0)
+                if any(re.search(self.SENSITIVE_PATTERNS[0], t) for t in [query, response]):
+                    sensitive_data_detected = True
+                    reason = f"Credit card pattern detected (Regex). {reason}".strip()
+                else:
+                    # If it's just email/phone and LLM says it's fine, we trust the LLM (likely support info)
+                    # But we still log it in the reason for transparency
+                    reason = f"Note: Potential contact info detected by Regex but cleared by LLM. {reason}".strip()
 
             # Decide escalation
-            escalate = confidence < self.threshold or sensitive_data_detected
+            sentiment = result.get("sentiment", "neutral")
+            escalate = confidence < self.threshold or sensitive_data_detected or sentiment == "angry"
 
             if escalate:
                 return self._escalation_payload(
                     confidence=confidence,
-                    negative_emotion=result.get("negative_emotion", False),
+                    sentiment=sentiment,
                     sensitive_data=sensitive_data_detected,
                     non_standard=result.get("non_standard", False),
-                    reason=result.get("reason", ""),
+                    is_refusal=result.get("is_refusal", False),
+                    reason=reason,
                     query=query,
                     response=response
                 )
@@ -125,18 +165,20 @@ AI RESPONSE:
             return {
                 "confidence_score": confidence,
                 "escalate": False,
-                "negative_emotion": result.get("negative_emotion", False),
+                "sentiment": sentiment,
                 "sensitive_data": sensitive_data_detected,
                 "non_standard": result.get("non_standard", False),
-                "reason": result.get("reason", "")
+                "is_refusal": result.get("is_refusal", False),
+                "reason": reason
             }
 
         except Exception as e:
             return self._escalation_payload(
                 confidence=0.0,
-                negative_emotion=False,
+                sentiment="neutral",
                 sensitive_data=False,
                 non_standard=True,
+                is_refusal=False,
                 reason=f"Evaluation failure: {str(e)}",
                 query=query,
                 response=response
@@ -145,9 +187,10 @@ AI RESPONSE:
     def _escalation_payload(
         self,
         confidence: float,
-        negative_emotion: bool,
+        sentiment: str,
         sensitive_data: bool,
         non_standard: bool,
+        is_refusal: bool,
         reason: str,
         query: str,
         response: str
@@ -158,9 +201,10 @@ AI RESPONSE:
         return {
             "confidence_score": confidence,
             "escalate": True,
-            "negative_emotion": negative_emotion,
+            "sentiment": sentiment,
             "sensitive_data": sensitive_data,
             "non_standard": non_standard,
+            "is_refusal": is_refusal,
             "reason": reason,
             "escalation_context": {
                 "user_query": query,
@@ -175,15 +219,38 @@ AI RESPONSE:
 if __name__ == "__main__":
     evaluator = DeterministicEvaluator()
 
-    ctx = "The company offers a 30-day refund policy on all electronics."
-    qry = "I'm very angry, can I get my money back?"
-    ans = "Yes, you can request a refund within 30 days of purchase. My email is test@example.com."
+    # Test 1: Sensitive data (Email)
+    ctx1 = "The company offers a 30-day refund policy on all electronics."
+    qry1 = "I'm very angry, can I get my money back?"
+    ans1 = "Yes, you can request a refund within 30 days of purchase. My email is test@example.com."
 
-    result = evaluator.evaluate(
-        query=qry,
-        context=ctx,
-        response=ans,
-        retrieval_score=0.9
-    )
+    print("--- Test 1: Email (Should be sensitive) ---")
+    result1 = evaluator.evaluate(query=qry1, context=ctx1, response=ans1, retrieval_score=0.9)
+    print(json.dumps(result1, indent=2, ensure_ascii=False))
 
-    print(json.dumps(result, indent=2, ensure_ascii=False))
+    # Test 2: Date (Should NOT be sensitive)
+    ctx2 = "Today is 2025-12-23. We are open until 18:00."
+    qry2 = "What is the date today?"
+    ans2 = "Today is 2025-12-23 and we are here to help."
+
+    print("\n--- Test 2: Date (Should NOT be sensitive) ---")
+    result2 = evaluator.evaluate(query=qry2, context=ctx2, response=ans2, retrieval_score=0.9)
+    print(json.dumps(result2, indent=2, ensure_ascii=False))
+
+    # Test 3: User's problematic query
+    ctx3 = "Pour vous connecter, utilisez votre identifiant Doxa."
+    qry3 = "C'est la troisième fois que j'essaie de me connecter et ça ne marche toujours pas ! Je commence vraiment à perdre patience avec votre outil, c'est inadmissible."
+    ans3 = "Je suis désolé pour ce désagrément. Pour résoudre votre problème de connexion, veuillez vérifier vos identifiants."
+
+    print("\n--- Test 3: Frustrated user (Should NOT be sensitive) ---")
+    result3 = evaluator.evaluate(query=qry3, context=ctx3, response=ans3, retrieval_score=0.9)
+    print(json.dumps(result3, indent=2, ensure_ascii=False))
+
+    # Test 4: Many steps (Should NOT be sensitive)
+    ctx4 = "Follow these steps to reset your password."
+    qry4 = "How to reset password?"
+    ans4 = "1. Go to settings. 2. Click security. 3. Select password. 4. Enter old. 5. Enter new. 6. Confirm. 7. Save. 8. Logout. 9. Login. 10. Done."
+
+    print("\n--- Test 4: Many steps (Should NOT be sensitive) ---")
+    result4 = evaluator.evaluate(query=qry4, context=ctx4, response=ans4, retrieval_score=0.9)
+    print(json.dumps(result4, indent=2, ensure_ascii=False))

@@ -141,27 +141,27 @@ class AgentManager:
                 query=query_for_rag,
                 context=context_used,
                 response=proposed_answer,
-                retrieval_score=best_retrieval_score,
-                threshold=self.confidence_threshold
+                retrieval_score=best_retrieval_score
             )
-            logger.info("Evaluation completed", trace_id=trace_id, confidence_score=evaluation["confidence_score"], has_sensitive_data=evaluation.get("has_sensitive_data"))
+            logger.info("Evaluation completed", trace_id=trace_id, confidence_score=evaluation["confidence_score"], sensitive_data=evaluation.get("sensitive_data"))
             print(f"📊 Score de confiance global : {evaluation['confidence_score']}")
-            print(f"   - Pertinence (Doc vs Question) : {evaluation['relevance_score']}")
-            print(f"   - Fidélité (Réponse vs Doc) : {evaluation['faithfulness_score']}")
-            print(f"   - Sentiment détecté : {evaluation.get('sentiment', 'neutral')}")
-            print(f"   - Données sensibles détectées : {evaluation.get('has_sensitive_data', False)}")
+            print(f"   - Données sensibles détectées : {evaluation.get('sensitive_data', False)}")
             print(f"   - Raison de l'évaluation : {evaluation.get('reason', 'N/A')}")
+            print(f"   - Sentiment détecté : {evaluation.get('sentiment', 'neutral')}")
+            print(f"   - Non standard : {evaluation.get('non_standard', False)}")
             
             # Step 5 & 5.1: Logic based on confidence and safety
             # Escalation triggers: 
             # 1. Sensitive data detected (100% escalation)
             # 2. Confidence score < 0.6
             # 3. LLM refused to answer (no info found)
+            # 4. User is angry
             
             should_escalate = (
-                evaluation.get("has_sensitive_data", False) or 
+                evaluation.get("sensitive_data", False) or 
                 evaluation["confidence_score"] < self.confidence_threshold or
-                evaluation.get("is_refusal", False)
+                evaluation.get("is_refusal", False) or
+                evaluation.get("sentiment") == "angry"
             )
 
             if not should_escalate:
@@ -184,9 +184,12 @@ class AgentManager:
                 }
             else:
                 # Step 5.1: Orient to specialist human agent (NO LLM)
-                if evaluation.get("has_sensitive_data", False):
+                if evaluation.get("sensitive_data", False):
                     print(f"🚨 Données sensibles détectées ! Escalade immédiate vers un agent humain...")
                     reason = "Sensitive data detected (PII)"
+                elif evaluation.get("sentiment") == "angry":
+                    print(f"🚨 Utilisateur en colère ! Escalade immédiate vers un agent humain...")
+                    reason = "User is angry"
                 elif evaluation.get("is_refusal"):
                     print(f"⚠️ L'IA n'a pas trouvé de réponse dans les documents. Orientation vers un agent humain...")
                     reason = "No information found in KB"
