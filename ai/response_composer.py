@@ -5,6 +5,11 @@ from mistralai import Mistral
 from dotenv import load_dotenv, find_dotenv
 from tenacity import retry, stop_after_attempt, wait_exponential
 from circuitbreaker import circuit
+from langdetect import detect, DetectorFactory
+from langdetect.lang_detect_exception import LangDetectException
+
+# Ensure consistent results for language detection
+DetectorFactory.seed = 0
 
 # Load env
 load_dotenv(find_dotenv())
@@ -13,6 +18,18 @@ if not API_KEY:
     raise ValueError("MISTRAL_API_KEY not found")
 
 client = Mistral(api_key=API_KEY)
+
+def detect_language(text: str) -> str:
+    """
+    Detect the language of the text. Returns 'fr' for French, 'en' for English, 'unknown' otherwise.
+    """
+    try:
+        lang = detect(text)
+        if lang in ['fr', 'en']:
+            return lang
+        return 'unknown'
+    except LangDetectException:
+        return 'unknown'
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 @circuit(failure_threshold=3, recovery_timeout=60)
@@ -29,9 +46,13 @@ def compose_response(
     if evaluation.get("escalate"):
         return compose_escalation_response(user_query, evaluation)
 
-    system_prompt = """You are a response composer for a technical support AI.
+    # Detect language
+    detected_lang = detect_language(user_query)
+    response_lang = "French" if detected_lang == 'fr' else "English"
 
-Generate a professional, clear and human response with the structure:
+    system_prompt = f"""You are a response composer for a technical support AI.
+
+Generate a professional, clear and human response in {response_lang} with the structure:
 1. Polite acknowledgement / thanks
 2. Restatement of the user's problem
 3. Proposed solution
@@ -78,9 +99,13 @@ def compose_escalation_response(user_query: str, evaluation: dict) -> dict:
     Safe response when escalation is required
     """
 
-    system_prompt = """You are a support assistant.
+    # Detect language
+    detected_lang = detect_language(user_query)
+    response_lang = "French" if detected_lang == 'fr' else "English"
 
-Generate a calm response that:
+    system_prompt = f"""You are a support assistant.
+
+Generate a calm response in {response_lang} that:
 1. Acknowledges the issue
 2. Explains that the request needs further review
 3. Reassures the user that it is being escalated
