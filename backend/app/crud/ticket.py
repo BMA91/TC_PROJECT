@@ -1,8 +1,9 @@
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 from typing import Optional
+import json
 
-from app.models.ticket import Ticket, TicketType, TicketStatus, TicketFeedback
+from app.models.ticket import Ticket, TicketType, TicketStatus, TicketFeedback, AIPipelineLog
 from app.schemas.ticket import TicketCreate, TicketUpdate, TicketFeedbackCreate, AgentResponseCreate
 from app.services.email_service import email_service
 
@@ -336,131 +337,4 @@ def get_escalated_tickets(
     tickets = query.offset(skip).limit(limit).all()
     
     return tickets
-
-
-# ===== SATISFACTION ANALYTICS =====
-
-def calculate_client_satisfaction_rate(db: Session) -> dict:
-    """
-    Calcule le taux de satisfaction des clients basé sur les ratings des feedbacks.
-    
-    Returns:
-        {
-            "average_rating": float,  # Moyenne des notes (1-5)
-            "satisfaction_percentage": float,  # Pourcentage de clients satisfaits (rating >= 4)
-            "total_feedbacks": int,  # Nombre total de feedbacks
-            "satisfied_count": int,  # Nombre de clients satisfaits (rating >= 4)
-            "dissatisfied_count": int,  # Nombre de clients insatisfaits
-            "average_rating_formatted": str  # Format "4.5/5"
-        }
-    """
-    from sqlalchemy import func
-    
-    total_feedbacks = db.query(TicketFeedback).count()
-    
-    if total_feedbacks == 0:
-        return {
-            "average_rating": 0,
-            "satisfaction_percentage": 0,
-            "total_feedbacks": 0,
-            "satisfied_count": 0,
-            "dissatisfied_count": 0,
-            "average_rating_formatted": "N/A"
-        }
-    
-    # Calculer la moyenne des ratings
-    average_rating = db.query(func.avg(TicketFeedback.rating)).scalar() or 0
-    average_rating = round(float(average_rating), 2)
-    
-    # Compter les clients satisfaits (rating >= 4)
-    satisfied_count = db.query(TicketFeedback).filter(TicketFeedback.rating >= 4).count()
-    dissatisfied_count = total_feedbacks - satisfied_count
-    
-    # Calculer le pourcentage de satisfaction
-    satisfaction_percentage = round((satisfied_count / total_feedbacks * 100), 2) if total_feedbacks > 0 else 0
-    
-    return {
-        "average_rating": average_rating,
-        "satisfaction_percentage": satisfaction_percentage,
-        "total_feedbacks": total_feedbacks,
-        "satisfied_count": satisfied_count,
-        "dissatisfied_count": dissatisfied_count,
-        "average_rating_formatted": f"{average_rating}/5"
-    }
-
-
-def get_satisfaction_by_rating_distribution(db: Session) -> dict:
-    """
-    Obtient la distribution des feedbacks par note (1-5).
-    
-    Returns:
-        {
-            "1_star": int,
-            "2_star": int,
-            "3_star": int,
-            "4_star": int,
-            "5_star": int
-        }
-    """
-    ratings = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
-    
-    for rating in range(1, 6):
-        count = db.query(TicketFeedback).filter(TicketFeedback.rating == rating).count()
-        ratings[rating] = count
-    
-    return {
-        "1_star": ratings[1],
-        "2_star": ratings[2],
-        "3_star": ratings[3],
-        "4_star": ratings[4],
-        "5_star": ratings[5]
-    }
-
-
-def get_recent_satisfaction_feedbacks(db: Session, limit: int = 10) -> list:
-    """
-    Obtient les feedbacks les plus récents pour visualiser la tendance de satisfaction.
-    
-    Args:
-        limit: Nombre de feedbacks à retourner
-    
-    Returns:
-        Liste des feedbacks récents avec détails
-    """
-    recent_feedbacks = db.query(TicketFeedback).order_by(
-        TicketFeedback.id.desc()
-    ).limit(limit).all()
-    
-    return [
-        {
-            "feedback_id": fb.id,
-            "ticket_id": fb.ticket_id,
-            "rating": fb.rating,
-            "is_satisfied": fb.is_satisfied,
-            "reason": fb.reason
-        }
-        for fb in recent_feedbacks
-    ]
-
-
-def get_satisfaction_dashboard(db: Session) -> dict:
-    """
-    Obtient le dashboard complet de satisfaction pour le panel admin.
-    
-    Returns:
-        {
-            "overall_metrics": dict,  # Métriques globales
-            "rating_distribution": dict,  # Distribution par note
-            "recent_feedbacks": list  # Feedbacks récents
-        }
-    """
-    overall_metrics = calculate_client_satisfaction_rate(db)
-    rating_distribution = get_satisfaction_by_rating_distribution(db)
-    recent_feedbacks = get_recent_satisfaction_feedbacks(db, limit=10)
-    
-    return {
-        "overall_metrics": overall_metrics,
-        "rating_distribution": rating_distribution,
-        "recent_feedbacks": recent_feedbacks
-    }
 

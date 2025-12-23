@@ -1,7 +1,7 @@
 import enum
 
 
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, Boolean, DateTime, Enum
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, Boolean, DateTime, Enum, Float
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -61,7 +61,7 @@ class Ticket(Base):
 
     # Relationships
     client = relationship("User", foreign_keys=[client_id], back_populates="tickets")
-    # pipeline_logs = relationship("AIPipelineLog", back_populates="ticket")  # Commented out - AIPipelineLog model not yet created
+    pipeline_logs = relationship("AIPipelineLog", back_populates="ticket")
     feedback = relationship("TicketFeedback", back_populates="ticket", uselist=False)
 
 
@@ -78,6 +78,57 @@ class TicketFeedback(Base):
     reason = Column(Text, nullable=True)  # Reason for dissatisfaction
     rating = Column(Integer, nullable=True)
     ticket = relationship("Ticket", back_populates="feedback")
+
+
+
+
+class AIPipelineLog(Base):
+    """Tracks AI processing pipeline results and logs"""
+    __tablename__ = "ai_pipeline_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    ticket_id = Column(Integer, ForeignKey("tickets.id"), nullable=False, index=True)
+    trace_id = Column(String, nullable=False, index=True)  # For tracking requests across logs
+
+    # Processing status
+    status = Column(String, nullable=False)  # 'processing', 'completed', 'failed', 'timeout'
+    started_at = Column(DateTime(timezone=True), server_default=func.now())
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    # AI Results storage
+    summary = Column(String, nullable=True)  # From query analyser
+    keywords = Column(Text, nullable=True)  # JSON array of keywords
+    category = Column(String, nullable=True)  # Auto-detected category
+
+    # RAG results
+    rag_docs = Column(Text, nullable=True)  # JSON array of retrieved documents with scores
+    proposed_answer = Column(Text, nullable=True)  # AI-generated answer before evaluation
+
+    # Evaluation results
+    confidence_score = Column(Float, nullable=True)  # 0.0 to 1.0
+    sentiment = Column(String, nullable=True)  # 'positive', 'negative', 'neutral', 'angry'
+    sensitive_data_detected = Column(Boolean, default=False)
+    escalation_reason = Column(String, nullable=True)  # Why it was escalated
+
+    # Final response (if AI handled it)
+    final_response = Column(Text, nullable=True)
+
+    # Processing metadata
+    processing_time_seconds = Column(Float, nullable=True)
+    error_message = Column(Text, nullable=True)
+
+    # Relationships
+    ticket = relationship("Ticket", back_populates="pipeline_logs")
+
+    __table_args__ = (
+        # Composite index for efficient queries
+        {"schema": None}
+    )
+
+
+
+
+
 
 
 

@@ -188,3 +188,47 @@ class AgentResponseResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
+class AIProcessingRequest(BaseModel):
+    """Schema pour déclencher le traitement AI d'un ticket"""
+    ticket_id: int = Field(..., description="ID du ticket à traiter")
+    webhook_url: str | None = Field(None, description="URL webhook pour notifier la fin du traitement (optionnel)")
+
+
+class AIProcessingStatus(BaseModel):
+    """Schema pour le statut du traitement AI"""
+    ticket_id: int = Field(..., description="ID du ticket")
+    status: str = Field(..., description="Statut du traitement: 'processing', 'completed', 'failed', 'timeout'")
+    started_at: datetime | None = Field(None, description="Date de début du traitement")
+    completed_at: datetime | None = Field(None, description="Date de fin du traitement")
+    processing_time_seconds: float | None = Field(None, description="Temps de traitement en secondes")
+    error_message: str | None = Field(None, description="Message d'erreur si échec")
+
+
+class AIPipelineLogResponse(BaseModel):
+    """Schema pour les résultats détaillés du pipeline AI"""
+    id: int = Field(..., description="ID du log")
+    ticket_id: int = Field(..., description="ID du ticket")
+    trace_id: str = Field(..., description="ID de traçabilité")
+    status: str = Field(..., description="Statut du traitement")
+    started_at: datetime = Field(..., description="Date de début")
+    completed_at: datetime | None = Field(None, description="Date de fin")
+    
+    # AI Results
+    summary: str | None = Field(None, description="Résumé du ticket")
+    keywords: str | None = Field(None, description="Mots-clés (JSON)")
+    category: str | None = Field(None, description="Catégorie détectée")
+    rag_docs: str | None = Field(None, description="Documents RAG utilisés (JSON)")
+    proposed_answer: str | None = Field(None, description="Réponse proposée par l'AI")
+    confidence_score: float | None = Field(None, description="Score de confiance (0-1)")
+    sentiment: str | None = Field(None, description="Sentiment détecté")
+    sensitive_data_detected: bool = Field(False, description="Données sensibles détectées")
+    escalation_reason: str | None = Field(None, description="Raison de l'escalade")
+    final_response: str | None = Field(None, description="Réponse finale de l'AI")
+    
+    processing_time_seconds: float | None = Field(None, description="Temps de traitement")
+    error_message: str | None = Field(None, description="Message d'erreur")
+    
+    class Config:
+        from_attributes = True
+

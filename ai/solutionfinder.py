@@ -6,12 +6,14 @@ import chromadb
 from chromadb.utils import embedding_functions
 from mistralai import Mistral
 from dotenv import load_dotenv, find_dotenv
-from pdf_processor import convert_pdf_to_markdown
+from .pdf_processor import convert_pdf_to_markdown
 from langchain_experimental.text_splitter import SemanticChunker
 from langchain_mistralai import MistralAIEmbeddings
+from tenacity import retry, stop_after_attempt, wait_exponential
+from circuitbreaker import circuit
 
 # Load env
-load_dotenv(find_dotenv())
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '.env'))
 API_KEY = os.getenv("MISTRAL_API_KEY")
 if not API_KEY:
     raise ValueError("MISTRAL_API_KEY not found")
@@ -175,6 +177,8 @@ def is_refusal(answer: str) -> bool:
 # -----------------------------
 # Main API
 # -----------------------------
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+@circuit(failure_threshold=3, recovery_timeout=60)
 def solution_finder(query, category: str = None, collection_name="ticket_knowledge_base", top_k=5):
     """
     Finds a solution by searching in the specified category first.

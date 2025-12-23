@@ -1,5 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
 from sqlalchemy.orm import Session
+import asyncio
+import time
+import requests
+import uuid
 
 from app.crud import ticket as ticket_crud, user as user_crud
 from app.dependencies import get_db
@@ -10,9 +14,13 @@ from app.schemas.ticket import (
     TicketFeedbackCreate,
     TicketFeedbackResponse,
     AgentResponseCreate,
-    AgentResponseResponse
+    AgentResponseResponse,
+    AIProcessingRequest,
+    AIProcessingStatus,
+    AIPipelineLogResponse
 )
 from app.models.ticket import TicketStatus, TicketType
+from app.services.ai_service import process_user_request
 
 router = APIRouter(prefix="/tickets", tags=["tickets"])
 
@@ -558,4 +566,257 @@ def list_escalated_tickets(
     )
     
     return tickets
+
+
+# ========== AI PROCESSING ENDPOINTS ==========
+
+async def process_ticket_ai_background(
+    ticket_id: int, 
+    ticket_content: str, 
+    trace_id: str, 
+    log_id: int, 
+    webhook_url: str | None,
+    db: Session
+):
+    """
+    Tâche en arrière-plan pour traiter un ticket avec l'IA.
+    Gère les timeouts et sauvegarde les résultats de manière asynchrone.
+    """
+    start_time = time.time()
+    
+    try:
+        # Timeout de 30 secondes pour le traitement AI
+        ai_result = await asyncio.wait_for(
+            asyncio.get_event_loop().run_in_executor(None, process_user_request, ticket_content),
+            timeout=30.0
+        )
+        
+        processing_time = time.time() - start_time
+        
+        # Sauvegarder les résultats de manière asynchrone
+        ticket_crud.update_ai_pipeline_log_with_results(
+            db=db,
+            log_id=log_id,
+            ai_results=ai_result,
+            processing_time=processing_time
+        )
+        
+        # Mettre à jour le ticket selon les résultats AI
+        ticket_crud.update_ticket_with_ai_results(
+            db=db,
+            ticket_id=ticket_id,
+            ai_results=ai_result
+        )
+        
+        # Notifier via webhook si fourni
+        if webhook_url:
+            try:
+                payload = {
+                    "ticket_id": ticket_id,
+                    "trace_id": trace_id,
+                    "status": "completed",
+                    "ai_result": ai_result,
+                    "processing_time": processing_time
+                }
+                requests.post(webhook_url, json=payload, timeout=5)
+            except Exception as e:
+                print(f"Webhook notification failed: {e}")
+    
+    except asyncio.TimeoutError:
+        # Timeout - marquer comme échoué
+        processing_time = time.time() - start_time
+        ticket_crud.update_ai_pipeline_log_with_results(
+            db=db,
+            log_id=log_id,
+            ai_results={},
+            processing_time=processing_time,
+            error_message="AI processing timeout (30 seconds)"
+        )
+        
+        # Notifier via webhook si fourni
+        if webhook_url:
+            try:
+                payload = {
+                    "ticket_id": ticket_id,
+                    "trace_id": trace_id,
+                    "status": "timeout",
+                    "error": "AI processing timeout"
+                }
+                requests.post(webhook_url, json=payload, timeout=5)
+            except Exception as e:
+                print(f"Webhook notification failed: {e}")
+    
+    except Exception as e:
+        # Erreur générale
+        processing_time = time.time() - start_time
+        ticket_crud.update_ai_pipeline_log_with_results(
+            db=db,
+            log_id=log_id,
+            ai_results={},
+            processing_time=processing_time,
+            error_message=str(e)
+        )
+        
+        # Notifier via webhook si fourni
+        if webhook_url:
+            try:
+                payload = {
+                    "ticket_id": ticket_id,
+                    "trace_id": trace_id,
+                    "status": "failed",
+                    "error": str(e)
+                }
+                requests.post(webhook_url, json=payload, timeout=5)
+            except Exception as e:
+                print(f"Webhook notification failed: {e}")
+
+
+@router.post(
+    "/ai/process",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Déclencher le traitement AI d'un ticket",
+    description="""
+    Déclenche le traitement asynchrone d'un ticket par l'IA.
+    
+    **Fonctionnalités:**
+    - Traitement en arrière-plan (non-bloquant)
+    - Timeout de 30 secondes
+    - Sauvegarde automatique des résultats
+    - Notification webhook optionnelle
+    - Suivi via trace_id
+    
+    **Paramètres:**
+    - **ticket_id**: ID du ticket à traiter
+    - **webhook_url**: URL pour recevoir les notifications (optionnel)
+    
+    **Retour:** trace_id pour suivre le traitement
+    """
+)
+async def process_ticket_ai(
+    request: AIProcessingRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """
+    Déclenche le traitement AI d'un ticket de manière asynchrone.
+    """
+    # Vérifier que le ticket existe
+    ticket = ticket_crud.get_ticket(db=db, ticket_id=request.ticket_id)
+    if not ticket:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Ticket not found",
+        )
+    
+    # Générer un trace_id unique
+    trace_id = str(uuid.uuid4())
+    
+    # Créer un log de pipeline AI
+    log = ticket_crud.create_ai_pipeline_log(
+        db=db,
+        ticket_id=request.ticket_id,
+        trace_id=trace_id
+    )
+    
+    # Préparer le contenu du ticket pour l'AI
+    ticket_content = f"{ticket.title}\n\n{ticket.description}"
+    
+    # Lancer le traitement en arrière-plan
+    background_tasks.add_task(
+        process_ticket_ai_background,
+        ticket_id=request.ticket_id,
+        ticket_content=ticket_content,
+        trace_id=trace_id,
+        log_id=log.id,
+        webhook_url=request.webhook_url,
+        db=db
+    )
+    
+    return {
+        "message": "AI processing started",
+        "ticket_id": request.ticket_id,
+        "trace_id": trace_id,
+        "status": "processing"
+    }
+
+
+@router.get(
+    "/ai/status/{ticket_id}",
+    response_model=AIProcessingStatus,
+    summary="Vérifier le statut du traitement AI d'un ticket",
+    description="""
+    Vérifie le statut du dernier traitement AI pour un ticket.
+    
+    **Statuts possibles:**
+    - **processing**: En cours de traitement
+    - **completed**: Traitement terminé avec succès
+    - **failed**: Échec du traitement
+    - **timeout**: Timeout dépassé (30 secondes)
+    """
+)
+def get_ai_processing_status(
+    ticket_id: int,
+    db: Session = Depends(get_db),
+):
+    """
+    Récupère le statut du dernier traitement AI pour un ticket.
+    """
+    # Vérifier que le ticket existe
+    ticket = ticket_crud.get_ticket(db=db, ticket_id=ticket_id)
+    if not ticket:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Ticket not found",
+        )
+    
+    # Récupérer le dernier log AI
+    latest_log = ticket_crud.get_latest_ai_pipeline_log(db=db, ticket_id=ticket_id)
+    if not latest_log:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No AI processing found for this ticket",
+        )
+    
+    return AIProcessingStatus(
+        ticket_id=ticket_id,
+        status=latest_log.status,
+        started_at=latest_log.started_at,
+        completed_at=latest_log.completed_at,
+        processing_time_seconds=latest_log.processing_time_seconds,
+        error_message=latest_log.error_message
+    )
+
+
+@router.get(
+    "/ai/logs/{ticket_id}",
+    response_model=list[AIPipelineLogResponse],
+    summary="Récupérer les logs de pipeline AI d'un ticket",
+    description="""
+    Récupère tous les logs de traitement AI pour un ticket.
+    
+    **Informations incluses:**
+    - Résumé et mots-clés
+    - Documents RAG utilisés
+    - Scores de confiance
+    - Réponses générées
+    - Raisons d'escalade
+    """
+)
+def get_ai_pipeline_logs(
+    ticket_id: int,
+    db: Session = Depends(get_db),
+):
+    """
+    Récupère tous les logs de pipeline AI pour un ticket.
+    """
+    # Vérifier que le ticket existe
+    ticket = ticket_crud.get_ticket(db=db, ticket_id=ticket_id)
+    if not ticket:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Ticket not found",
+        )
+    
+    logs = ticket_crud.get_ai_pipeline_logs_by_ticket(db=db, ticket_id=ticket_id)
+    return logs
 

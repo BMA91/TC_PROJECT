@@ -3,9 +3,11 @@ import os
 import json
 from mistralai import Mistral
 from dotenv import load_dotenv, find_dotenv
+from tenacity import retry, stop_after_attempt, wait_exponential
+from circuitbreaker import circuit
 
 # Load environment variables from .env
-load_dotenv(find_dotenv())
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '.env'))
 API_KEY = os.environ.get("MISTRAL_API_KEY")
 if not API_KEY:
     raise ValueError("Please set MISTRAL_API_KEY in your .env file")
@@ -13,6 +15,8 @@ if not API_KEY:
 # Initialize Mistral client
 client = Mistral(api_key=API_KEY)
 
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+@circuit(failure_threshold=3, recovery_timeout=60)
 def analyse_query(query: str) -> dict:
     """
     Sends a query to Mistral and returns a summary, keywords, and an optimized version.

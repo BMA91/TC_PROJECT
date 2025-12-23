@@ -1,7 +1,7 @@
 "use client";
 import { useState, useContext } from "react";
 import { useRouter } from "next/navigation";
-import { LoginContext } from "../layout"; 
+import { LoginContext } from "../layout";
 
 export default function Login() {
   const context = useContext(LoginContext);
@@ -24,7 +24,7 @@ export default function Login() {
       ...prev,
       [name]: type === "checkbox" ? checked : value,
     }));
-    // Clear error when user starts typing
+
     if (error) setError("");
   };
 
@@ -54,21 +54,18 @@ export default function Login() {
       const data = await response.json();
 
       if (!response.ok) {
-        // Handle error response
         setError(data.error || "Email ou mot de passe invalide");
         setIsLoading(false);
         return;
       }
 
-      // Success - store auth state and user data
-      localStorage.setItem("isAuth", "true");
       if (data.user) {
         setLoginData(data.user);
-        // Optionally store user data in localStorage
+        localStorage.setItem("isAuth", "true");
         localStorage.setItem("userData", JSON.stringify(data.user));
+        window.dispatchEvent(new Event("storage"));
       }
 
-      // Redirect to dashboard
       router.push("/dashboard");
     } catch (err) {
       console.error("Login error:", err);
