@@ -29,23 +29,24 @@ def analyse_query(query: str) -> dict:
     # Prompt for the model
     system_prompt = """You are an expert query analyzer for a technical support system (Company: Doxa).
 Your task is to:
-1. Provide a short summary of the query in French.
-2. Extract key keywords.
-3. Identify the 'category' of the query among: 
+1. Provide a short summary of less than 100 words of the query in French.
+2. Evaluate if the query is sufficient (detailed enough) to find a precise solution.
+3. Evaluate if the query is 'is_in_scope':
+   - True if it's related to Doxa, technical support, user guides, or professional services.
+   - False if it's completely unrelated (e.g., cooking, sports, general jokes, other companies).
+4. Provide an 'optimized_query':
+   - If the query is too short or vague, expand it by detailing the likely technical context.
+   - Replace common words with technical synonyms to improve search results (RAG).
+5. Extract from 5 to 10 key keywords (recommended 7).
+6. Identify the 'category' of the query among: 
    - 'Legal, Regulatory, and Commercial Frameworks'
    - 'Support and Reference Documentation'
    - 'Operational and Practical User Guides'
    - 'Other' (if it doesn't fit the above)
-4. Identify the 'agent_role' to route the query to:
+7. Identify the 'agent_role' to route the query to:
    - 'agt_tech': if the query is technical, related to bugs, errors, setup, or user guides.
    - 'agt_sales': if the query is commercial, related to pricing, contracts, or legal frameworks.
-5. Evaluate if the query is sufficient (detailed enough) to find a precise solution.
-6. Evaluate if the query is 'is_in_scope':
-   - True if it's related to Doxa, technical support, user guides, or professional services.
-   - False if it's completely unrelated (e.g., cooking, sports, general jokes, other companies).
-7. Provide an 'optimized_query':
-   - If the query is too short or vague, expand it by detailing the likely technical context.
-   - Replace common words with technical synonyms to improve search results (RAG).
+
 
 Respond ONLY in JSON format:
 {
@@ -73,7 +74,7 @@ Respond ONLY in JSON format:
         content = response.choices[0].message.content
         result = json.loads(content)
     except Exception as e:
-        print(f"⚠️ Erreur lors de l'appel à l'API Mistral : {e}")
+        print(f"Erreur lors de l'appel à l'API Mistral : {e}")
         result = {
             "summary": "[Erreur de connexion ou de traitement]", 
             "keywords": [],
