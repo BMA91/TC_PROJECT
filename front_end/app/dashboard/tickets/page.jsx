@@ -18,6 +18,7 @@ export default function TicketsPage() {
   const [menu, setMenu] = useState(false);
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [aiAnswers, setAiAnswers] = useState({});
 
   const [tab, setTab] = useState("all");
   const [search, setSearch] = useState("");
@@ -29,30 +30,46 @@ export default function TicketsPage() {
     fetch("http://127.0.0.1:8000/tickets/")
       .then((res) => res.json())
       .then((data) => {
-        setTickets(data);
+        // Ensure we always have an array
+        setTickets(Array.isArray(data) ? data : []);
         setLoading(false);
       })
       .catch((err) => {
         console.error("Failed to fetch tickets:", err);
+        setTickets([]);
         setLoading(false);
       });
   }, [loginData, router]);
 
+
+
   const filteredTickets = useMemo(() => {
+    const s = search.toLowerCase();
     return tickets
-      .filter((t) =>
-        tab === "pending"
-          ? t.status === "pending"
-          : tab === "done"
-          ? t.status === "done"
-          : true
-      )
-      .filter((t) => t.date >= from && t.date <= to)
-      .filter(
-        (t) =>
-          t.type.toLowerCase().includes(search.toLowerCase()) ||
-          String(t.id).includes(search)
-      );
+      .filter((t) => {
+        // Map UI tabs to backend status values (French)
+        if (tab === "pending") return (t.status || "").toLowerCase() === "en cours";
+        if (tab === "done") return (t.status || "").toLowerCase() === "fini";
+        return true;
+      })
+      .filter((t) => {
+        // Date filter - compare created_at (ISO) to YYYY-MM-DD inputs
+        if (!t.created_at) return true;
+        const createdDate = new Date(t.created_at).toISOString().slice(0, 10);
+        return createdDate >= from && createdDate <= to;
+      })
+      .filter((t) => {
+        // Search by ticket_type, title, reference_id or id
+        const type = (t.ticket_type || "").toString().toLowerCase();
+        const title = (t.title || "").toLowerCase();
+        const ref = (t.reference_id || "").toLowerCase();
+        return (
+          type.includes(s) ||
+          title.includes(s) ||
+          ref.includes(s) ||
+          String(t.id).includes(s)
+        );
+      });
   }, [tickets, tab, search, from, to]);
 
   const totalPages = Math.ceil(filteredTickets.length / PAGE_SIZE);
@@ -60,6 +77,45 @@ export default function TicketsPage() {
     (page - 1) * PAGE_SIZE,
     page * PAGE_SIZE
   );
+
+  // Fetch latest AI answer for visible (paginated) tickets that are escalated
+  useEffect(() => {
+    const idsToFetch = paginatedTickets
+      .filter((t) => t.is_escalated)
+      .map((t) => t.id);
+
+    if (idsToFetch.length === 0) return;
+
+    let mounted = true;
+
+    const fetchAnswers = async () => {
+      const results = {};
+      await Promise.all(
+        idsToFetch.map(async (id) => {
+          try {
+            const res = await fetch(`http://127.0.0.1:8000/tickets/ai/logs/${id}`);
+            if (!res.ok) return;
+            const logs = await res.json();
+            if (Array.isArray(logs) && logs.length > 0) {
+              // take the latest log (first entry expected to be newest)
+              const latest = logs[0];
+              results[id] = latest.final_response || latest.proposed_answer || null;
+            }
+          } catch (e) {
+            // ignore per-ticket errors
+          }
+        })
+      );
+
+      if (mounted) setAiAnswers((prev) => ({ ...prev, ...results }));
+    };
+
+    fetchAnswers();
+
+    return () => {
+      mounted = false;
+    };
+  }, [paginatedTickets]);
 
   if (!context) return null;
 
@@ -188,6 +244,7 @@ export default function TicketsPage() {
                 <tr>
                   <th className="p-3 text-left">ID</th>
                   <th className="p-3 text-left">Type</th>
+                  <th className="p-3 text-left">AI Answer</th>
                   <th className="p-3 text-left">Status</th>
                   <th className="p-3 text-center">Rating</th>
                 </tr>
@@ -196,12 +253,20 @@ export default function TicketsPage() {
                 {paginatedTickets.map((ticket) => (
                   <tr key={ticket.id} className="border-b">
                     <td className="p-3">#{ticket.id}</td>
-                    <td className="p-3 capitalize">{ticket.type}</td>
+                    <td className="p-3 capitalize">{ticket.ticket_type || ticket.category || "-"}</td>
+                    <td className="p-3 text-sm text-slate-600 max-w-xl truncate">
+                      {aiAnswers[ticket.id]
+                        ? String(aiAnswers[ticket.id])
+                        : ticket.is_escalated
+                        ? "En cours de traitement par AI..."
+                        : "-"}
+                    </td>
                     <td className="p-3">{ticket.status}</td>
                     <td className="p-3 text-center">
-                      {ticket.rating
-                        ? "★".repeat(ticket.rating) +
-                          "☆".repeat(5 - ticket.rating)
+                      {/* Ticket feedback rating may be nested; try common fields */}
+                      {ticket.feedback?.rating || ticket.rating
+                        ? "★".repeat(ticket.feedback?.rating || ticket.rating) +
+                          "☆".repeat(5 - (ticket.feedback?.rating || ticket.rating))
                         : "—"}
                     </td>
                   </tr>
