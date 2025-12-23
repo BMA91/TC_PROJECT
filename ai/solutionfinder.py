@@ -82,7 +82,7 @@ def ingest_pdf_to_chroma(pdf_path: str, category: str = "general", collection_na
 # -----------------------------
 # RAG Core
 # -----------------------------
-def retrieve_from_chroma(query, category: str = None, collection_name="ticket_knowledge_base", k=3):
+def retrieve_from_chroma(query, category: str = None, collection_name="ticket_knowledge_base", k=5):
     collection = get_or_create_collection(collection_name)
     
     # Prepare filter if category is provided
@@ -175,7 +175,7 @@ def is_refusal(answer: str) -> bool:
 # -----------------------------
 # Main API
 # -----------------------------
-def solution_finder(query, category: str = None, collection_name="ticket_knowledge_base", top_k=3):
+def solution_finder(query, category: str = None, collection_name="ticket_knowledge_base", top_k=5):
     """
     Finds a solution by searching in the specified category first.
     If no relevant documents are found OR if the answer is a refusal,
