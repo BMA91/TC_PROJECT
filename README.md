@@ -164,11 +164,5 @@ npm --prefix front_end run dev
 cd backend; .\.venv\Scripts\Activate.ps1; python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-## Next steps / Recommendations
-
-- Add a `.env` for configurable settings and update `database.py` to read from it.
-- Replace DB recreation with database migrations (Alembic) for production.
-- Add documentation for AI model configuration (which LLM provider or local model to use).
-
 
 
