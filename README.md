@@ -170,9 +170,5 @@ cd backend; .\.venv\Scripts\Activate.ps1; python -m uvicorn app.main:app --reloa
 - Replace DB recreation with database migrations (Alembic) for production.
 - Add documentation for AI model configuration (which LLM provider or local model to use).
 
----
 
-If you want, I can:
-- Add `.env.example` and update `database.py` to read `DATABASE_URL` from env.
-- Add a short `Makefile` or PowerShell script to start both backend and frontend concurrently.
 
