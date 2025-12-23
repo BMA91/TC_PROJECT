@@ -3,6 +3,8 @@ import os
 import json
 from mistralai import Mistral
 from dotenv import load_dotenv, find_dotenv
+from tenacity import retry, stop_after_attempt, wait_exponential
+from circuitbreaker import circuit
 
 # Load env
 load_dotenv(find_dotenv())
@@ -12,7 +14,8 @@ if not API_KEY:
 
 client = Mistral(api_key=API_KEY)
 
-
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+@circuit(failure_threshold=3, recovery_timeout=60)
 def compose_response(
     user_query: str,
     solution: str,

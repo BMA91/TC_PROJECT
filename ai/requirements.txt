@@ -8,3 +8,6 @@ langchain
 langchain-mistralai
 langchain-experimental
 chromadb
+tenacity
+circuitbreaker
+structlog
