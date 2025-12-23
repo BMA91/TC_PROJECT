@@ -47,9 +47,12 @@ export default function First() {
                 </a>
               </div>
 
-              <button className="ml-auto bg-blue-600 px-6 py-2 hover:bg-blue-700 text-white font-medium rounded-lg transition shadow-md">
+              <Link
+                href="/auth"
+                className="ml-auto bg-blue-600 px-6 py-2 hover:bg-blue-700 text-white font-medium rounded-lg transition shadow-md"
+              >
                 Vos tickets
-              </button>
+              </Link>
             </div>
           </div>
         </nav>
@@ -68,10 +71,12 @@ export default function First() {
               <div className="input-wrapper">
                 <input
                   type="email"
-                  class="email-input"
+                  className="email-input"
                   placeholder="Enter your email"
                 />
-                <button className="login-button">Log in</button>
+                <Link href="/auth" className="login-button">
+                  log in
+                </Link>
               </div>
             </div>
 

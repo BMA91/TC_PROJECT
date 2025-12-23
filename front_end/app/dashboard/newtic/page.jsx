@@ -7,17 +7,10 @@ import Link from "next/link";
 import Image from "next/image";
 
 const ticketTypes = [
-  {
-    label: "L'application ne se charge pas.",
-    value: "L'application ne se charge pas.",
-  },
-  { label: "Plateforme inaccessible", value: "Plateforme inaccessible" },
-  {
-    label: "Un problème de synchronisation bancaire",
-    value: "Un problème de synchronisation bancaire",
-  },
-  { label: "Erreur système", value: "Erreur système" },
-  { label: "Blocage total d'un projet", value: "Blocage total d'un projet" },
+  { label: "Legal, Regulatory, and Commercial Frameworks", value: "Legal, Regulatory, and Commercial Frameworks" },
+  { label: "Support and Reference Documentation", value: "Support and Reference Documentation" },
+  { label: "Operational and Practical User Guides", value: "Operational and Practical User Guides" },
+  { label: "Other", value: "Other" },
 ];
 
 const logo = "/images/logo.svg";
@@ -25,7 +18,7 @@ const userp = "/images/user.svg";
 
 export default function TicketsPage() {
   const context = useContext(LoginContext);
-  const { loginData } = context ?? {};
+  const { loginData, setLoginData } = context ?? {};
   const router = useRouter();
 
   const [menu, setMenu] = useState(false);
@@ -62,7 +55,7 @@ export default function TicketsPage() {
       data.append("ticketType", formData.ticketType);
       if (formData.attachment) data.append("attachment", formData.attachment);
 
-      const res = await fetch("http://127.0.0.1:8000/tickets", {
+      const res = await fetch("/api/tickets", {
         method: "POST",
         body: data,
       });
@@ -122,13 +115,25 @@ export default function TicketsPage() {
           {menu && (
             <div className="absolute right-0 mt-3 w-56 bg-[#0C2155] text-white p-4 rounded-xl">
               <p className="font-semibold">{loginData?.address ?? "User"}</p>
-              <p className="text-[#AAC7FF] text-sm">UI/UX Designer</p>
+              <p className="text-[#AAC7FF] text-sm">{loginData?.role ?? "User"}</p>
               <hr className="my-3 border-white/30" />
               <button className="border border-white rounded px-2 py-1 mb-3">
                 Modify
               </button>
               <hr className="my-3 border-white/30" />
-              <button className="text-red-400 text-left">Logout</button>
+              <button
+                onClick={() => {
+                  try {
+                    localStorage.removeItem("isAuth");
+                    localStorage.removeItem("userData");
+                  } catch (e) {}
+                  setLoginData?.(null);
+                  router.push("/auth");
+                }}
+                className="text-red-400 text-left"
+              >
+                Logout
+              </button>
             </div>
           )}
         </div>
