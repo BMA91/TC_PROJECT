@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, case
 from datetime import datetime, timezone
 from typing import Optional
 import json
@@ -15,25 +15,24 @@ def generate_reference_id(db: Session) -> str:
     Exemple: REF-2025-000123
     """
     current_year = datetime.now().year
-    
-    # Trouver le dernier ticket de l'année
-    last_ticket = (
-        db.query(Ticket)
+
+    # Fetch only the max reference_id for the year (avoids loading a full Ticket object)
+    last_reference_id = (
+        db.query(func.max(Ticket.reference_id))
         .filter(Ticket.reference_id.like(f"REF-{current_year}-%"))
-        .order_by(Ticket.reference_id.desc())
-        .first()
+        .scalar()
     )
-    
-    if last_ticket and last_ticket.reference_id:
+
+    if last_reference_id:
         # Extraire le numéro du dernier ticket
         try:
-            last_number = int(last_ticket.reference_id.split("-")[-1])
+            last_number = int(last_reference_id.split("-")[-1])
             new_number = last_number + 1
         except (ValueError, IndexError):
             new_number = 1
     else:
         new_number = 1
-    
+
     # Formater avec 6 chiffres (000001, 000002, etc.)
     reference_id = f"REF-{current_year}-{new_number:06d}"
     return reference_id
@@ -438,10 +437,13 @@ def get_latest_ai_pipeline_log(db: Session, ticket_id: int) -> AIPipelineLog | N
 
 def calculate_client_satisfaction_rate(db: Session) -> float:
     """Calcule le taux de satisfaction global (is_satisfied == True)"""
-    total = db.query(TicketFeedback).count()
-    if total == 0:
+    # Single query: count total rows and satisfied rows simultaneously
+    total, satisfied = db.query(
+        func.count(TicketFeedback.id),
+        func.count(case((TicketFeedback.is_satisfied, TicketFeedback.id)))
+    ).first()
+    if not total:
         return 0.0
-    satisfied = db.query(TicketFeedback).filter(TicketFeedback.is_satisfied == True).count()
     return (satisfied / total) * 100
 
 
@@ -462,11 +464,17 @@ def get_recent_satisfaction_feedbacks(db: Session, limit: int = 10) -> list[Tick
 
 def get_satisfaction_dashboard(db: Session) -> dict:
     """Retourne un résumé complet pour le dashboard admin"""
-    
-    total_feedback = db.query(TicketFeedback).count()
-    avg_rating = db.query(func.avg(TicketFeedback.rating)).scalar() or 0.0
-    satisfaction_rate = calculate_client_satisfaction_rate(db)
-    
+
+    # Combine total count, average rating and satisfaction count into a single query
+    total_feedback, avg_rating, satisfied_count = db.query(
+        func.count(TicketFeedback.id),
+        func.avg(TicketFeedback.rating),
+        func.count(case((TicketFeedback.is_satisfied, TicketFeedback.id)))
+    ).first()
+
+    avg_rating = avg_rating or 0.0
+    satisfaction_rate = (satisfied_count / total_feedback * 100) if total_feedback else 0.0
+
     return {
         "total_feedback": total_feedback,
         "average_rating": round(float(avg_rating), 2),

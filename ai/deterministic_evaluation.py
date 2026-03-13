@@ -17,11 +17,11 @@ class DeterministicEvaluator:
     - Escalates if needed
     """
 
-    # Patterns for sensitive data
+    # Precompiled patterns for sensitive data detection
     SENSITIVE_PATTERNS = [
-        r"\b(?:\d[ -]*?){12,18}\d\b",  # credit card numbers (13-19 digits with spaces/dashes)
-        r"\b[\w\.-]+@[\w\.-]+\.\w{2,4}\b",  # emails
-        r"\b(?:\+?\d{1,3}[-.\s]?)?\(?\d{2,4}\)?(?:[-.\s]?\d{2,4}){3,5}\b"  # phone numbers
+        re.compile(r"\b(?:\d[ -]*?){12,18}\d\b"),  # credit card numbers (13-19 digits with spaces/dashes)
+        re.compile(r"\b[\w\.-]+@[\w\.-]+\.\w{2,4}\b"),  # emails
+        re.compile(r"\b(?:\+?\d{1,3}[-.\s]?)?\(?\d{2,4}\)?(?:[-.\s]?\d{2,4}){3,5}\b"),  # phone numbers
     ]
 
     def __init__(self, confidence_threshold: float = 0.6):
@@ -33,17 +33,13 @@ class DeterministicEvaluator:
         self.threshold = confidence_threshold
 
     def _detect_sensitive_data(self, text: str) -> bool:
-        for i, p in enumerate(self.SENSITIVE_PATTERNS):
-            matches = re.finditer(p, text)
-            for m in matches:
+        for i, pattern in enumerate(self.SENSITIVE_PATTERNS):
+            for m in pattern.finditer(text):
                 match_text = m.group()
                 # For phone numbers (index 2), ensure at least 10 digits in the match itself
                 if i == 2:
                     digit_count = sum(c.isdigit() for c in match_text)
                     if digit_count >= 10:
-                        # Check if it's not just a sequence of steps like "1. ... 2. ... 10."
-                        # A real phone number usually doesn't have words in between digits
-                        # but our regex already handles some separators.
                         return True
                 else:
                     return True
@@ -138,7 +134,7 @@ AI RESPONSE:
 
             if regex_sensitive and not llm_sensitive:
                 # Check if it's a credit card (Pattern 0)
-                if any(re.search(self.SENSITIVE_PATTERNS[0], t) for t in [query, response]):
+                if any(self.SENSITIVE_PATTERNS[0].search(t) for t in [query, response]):
                     sensitive_data_detected = True
                     reason = f"Credit card pattern detected (Regex). {reason}".strip()
                 else:
