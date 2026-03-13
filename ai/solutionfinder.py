@@ -161,21 +161,24 @@ Answer with a clear solution and short explanation.
 
     return response.choices[0].message.content
 
+# Module-level constant so the list is created only once
+_REFUSAL_KEYWORDS = (
+    "ne contiennent pas", "pas d'informations", "pas d'information",
+    "je ne sais pas", "information is missing", "not mentioned",
+    "aucune information", "malheureusement", "don't have information",
+    "do not contain", "no information", "not found",
+    "not provide", "unable to find", "cannot find", "not available",
+    "n'est pas mentionné", "ne précise pas", "ne mentionnent pas",
+    "ne mentionne pas", "pas explicitement",
+)
+
+
 def is_refusal(answer: str) -> bool:
     """
     Detects if the LLM answer is a refusal to answer due to lack of information.
     """
-    refusal_keywords = [
-        "ne contiennent pas", "pas d'informations", "pas d'information",
-        "je ne sais pas", "information is missing", "not mentioned",
-        "aucune information", "malheureusement", "don't have information",
-        "do not contain", "no information", "not found",
-        "not provide", "unable to find", "cannot find", "not available",
-        "n'est pas mentionné", "ne précise pas", "ne mentionnent pas",
-        "ne mentionne pas", "pas explicitement"
-    ]
     answer_lower = answer.lower()
-    return any(kw in answer_lower for kw in refusal_keywords)
+    return any(kw in answer_lower for kw in _REFUSAL_KEYWORDS)
 
 # -----------------------------
 # Main API

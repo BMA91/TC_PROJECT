@@ -570,6 +570,16 @@ def list_escalated_tickets(
 
 # ========== AI PROCESSING ENDPOINTS ==========
 
+def _notify_webhook(webhook_url: str | None, payload: dict) -> None:
+    """Send a fire-and-forget webhook notification, silently ignoring failures."""
+    if not webhook_url:
+        return
+    try:
+        requests.post(webhook_url, json=payload, timeout=5)
+    except Exception as e:
+        print(f"Webhook notification failed: {e}")
+
+
 async def process_ticket_ai_background(
     ticket_id: int, 
     ticket_content: str, 
@@ -608,19 +618,13 @@ async def process_ticket_ai_background(
             ai_results=ai_result
         )
         
-        # Notifier via webhook si fourni
-        if webhook_url:
-            try:
-                payload = {
-                    "ticket_id": ticket_id,
-                    "trace_id": trace_id,
-                    "status": "completed",
-                    "ai_result": ai_result,
-                    "processing_time": processing_time
-                }
-                requests.post(webhook_url, json=payload, timeout=5)
-            except Exception as e:
-                print(f"Webhook notification failed: {e}")
+        _notify_webhook(webhook_url, {
+            "ticket_id": ticket_id,
+            "trace_id": trace_id,
+            "status": "completed",
+            "ai_result": ai_result,
+            "processing_time": processing_time,
+        })
     
     except asyncio.TimeoutError:
         # Timeout - marquer comme échoué
@@ -632,19 +636,12 @@ async def process_ticket_ai_background(
             processing_time=processing_time,
             error_message="AI processing timeout (30 seconds)"
         )
-        
-        # Notifier via webhook si fourni
-        if webhook_url:
-            try:
-                payload = {
-                    "ticket_id": ticket_id,
-                    "trace_id": trace_id,
-                    "status": "timeout",
-                    "error": "AI processing timeout"
-                }
-                requests.post(webhook_url, json=payload, timeout=5)
-            except Exception as e:
-                print(f"Webhook notification failed: {e}")
+        _notify_webhook(webhook_url, {
+            "ticket_id": ticket_id,
+            "trace_id": trace_id,
+            "status": "timeout",
+            "error": "AI processing timeout",
+        })
     
     except Exception as e:
         # Erreur générale
@@ -656,19 +653,12 @@ async def process_ticket_ai_background(
             processing_time=processing_time,
             error_message=str(e)
         )
-        
-        # Notifier via webhook si fourni
-        if webhook_url:
-            try:
-                payload = {
-                    "ticket_id": ticket_id,
-                    "trace_id": trace_id,
-                    "status": "failed",
-                    "error": str(e)
-                }
-                requests.post(webhook_url, json=payload, timeout=5)
-            except Exception as e:
-                print(f"Webhook notification failed: {e}")
+        _notify_webhook(webhook_url, {
+            "ticket_id": ticket_id,
+            "trace_id": trace_id,
+            "status": "failed",
+            "error": str(e),
+        })
 
 
 @router.post(

@@ -55,7 +55,7 @@ class Ticket(Base):
     assigned_agent_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 
